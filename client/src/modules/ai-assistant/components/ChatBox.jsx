@@ -8,25 +8,53 @@ const ChatBox = () => {
 
   const [input, setInput] = useState("");
 
-  const handleSend = () => {
+  // 🔥 NEW: backend call function
+  const sendMessageToBackend = async (message) => {
+    try {
+      const res = await fetch("http://localhost:5000/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message }),
+      });
+
+      const data = await res.json();
+      return data.reply;
+    } catch (error) {
+      console.error(error);
+      return "Server error. Please try again.";
+    }
+  };
+
+  // 🔥 UPDATED handleSend
+  const handleSend = async () => {
     if (!input.trim()) return;
 
-    const userMessage = { sender: "user", text: input };
+    const userMessage = input;
 
-    // add user message
-    setMessages((prev) => [...prev, userMessage]);
-
-    // temporary bot reply
-    setTimeout(() => {
-      const botReply = {
-        sender: "bot",
-        text: "Thinking...",
-      };
-
-      setMessages((prev) => [...prev, botReply]);
-    }, 500);
+    // show user message
+    setMessages((prev) => [
+      ...prev,
+      { sender: "user", text: userMessage },
+    ]);
 
     setInput("");
+
+    // temporary loading message
+    setMessages((prev) => [
+      ...prev,
+      { sender: "bot", text: "Thinking..." },
+    ]);
+
+    // call backend
+    const reply = await sendMessageToBackend(userMessage);
+
+    // replace "Thinking..." with actual reply
+    setMessages((prev) => [
+      ...prev.slice(0, -1),
+      { sender: "bot", text: reply },
+    ]);
   };
 
   return (

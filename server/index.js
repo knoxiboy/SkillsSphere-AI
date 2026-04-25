@@ -20,6 +20,33 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK" });
 });
 
+app.post("/api/chat", (req, res) => {
+  try {
+    const { message } = req.body;
+
+    // validation
+    if (!message) {
+      return res.status(400).json({ error: "Message required" });
+    }
+
+    let reply = "I didn’t understand that.";
+
+    const msg = message.toLowerCase();
+
+    if (msg.includes("hello") || msg.includes("hi")) {
+      reply = "Hi! How can I help you?";
+    } else if (msg.includes("help")) {
+      reply = "Sure! Tell me what you need help with.";
+    } else if (msg.includes("resume")) {
+      reply = "You can upload or manage your resumes here.";
+    }
+
+    res.json({ reply });
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/resume", resumeRoutes);
 

@@ -63,27 +63,6 @@ export function extractExperienceInYears(text = "") {
     maxYears = Math.max(maxYears, years + months / 12);
   }
 
-
-  // Examples: "3-5 years", "2 to 4 years", "1.5–3 yrs"
-  const rangePattern =
-    /(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/gi;
-  for (const match of content.matchAll(rangePattern)) {
-    const lower = toNumber(match[1]);
-    const upper = toNumber(match[2]);
-    detectedValues.push((lower + upper) / 2);
-    combinedMatchedIndices.push({
-      start: match.index,
-      end: match.index + match[0].length,
-    });
-  }
-
-  // Examples: "3 years", "2+ years", "1 yr"
-  const yearsPattern = /(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/gi;
-  for (const match of content.matchAll(yearsPattern)) {
-    if (isOverlapping(match.index)) continue;
-    detectedValues.push(toNumber(match[1]));
-
- 
   // ================================
   // 4. PLUS (2+ years)
   // ================================

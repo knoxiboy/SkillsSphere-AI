@@ -33,12 +33,19 @@ function App() {
     <div className="min-h-screen bg-[#020617] text-white">
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/job-matcher" element={<JobMatcherPage />} />
+        <Route 
+          path="/job-matcher" 
+          element={
+            <ProtectedRoute requiredRole="student">
+              <JobMatcherPage />
+            </ProtectedRoute>
+          } 
+        />
         {import.meta.env.DEV && <Route path="/demo" element={<ComponentDemo />} />}
         <Route 
           path="/resume-analyzer" 
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="student">
               <ResumeAnalyzerPage />
             </ProtectedRoute>
           } 

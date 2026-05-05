@@ -1,4 +1,4 @@
-import techKeywords from "../data/techKeywords.json" with { type: "json" };
+import techKeywords from "../config/keywords.js";
 import { normalizeSkillArray } from "../utils/skillNormalizer.js";
 
 /**
@@ -8,7 +8,6 @@ import { normalizeSkillArray } from "../utils/skillNormalizer.js";
 export const techStandardEvaluator = ({ resumeText = "", weight = 0.15 }) => {
   const lowerText = resumeText.toLowerCase();
   const domainMatches = {};
-  const missingDomains = [];
 
   Object.keys(techKeywords).forEach(domain => {
     // Normalize domain keywords to match our canonical forms
@@ -47,7 +46,8 @@ export const techStandardEvaluator = ({ resumeText = "", weight = 0.15 }) => {
   if (domainMatches.frontend.length > 0 && domainMatches.backend.length === 0) {
     suggestions.push("As a Frontend dev, consider learning basic Backend (Node.js/SQL) to become Fullstack.");
   }
-  if ((domainMatches.frontend.length > 0 || domainMatches.backend.length > 0) && domainMatches.cloud_devops.length === 0) {
+  if ((domainMatches.frontend?.length > 0 || domainMatches.backend?.length > 0) && 
+      (domainMatches.cloud?.length === 0 && domainMatches.devops?.length === 0)) {
     suggestions.push("Add Cloud/DevOps skills (Docker, AWS) to demonstrate modern deployment knowledge.");
   }
 

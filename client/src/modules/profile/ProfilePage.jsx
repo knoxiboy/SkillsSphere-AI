@@ -19,8 +19,8 @@ import ProfileField from "./components/ProfileField";
 
 // Mock user — no API calls, frontend-only
 const MOCK_USER = {
-  name: "Abhishek Kumar",
-  email: "abhishek@example.com",
+  name: "Candidate One",
+  email: "candidate@example.com",
   role: "student",           // "student" | "tutor" | "recruiter"
   isEmailVerified: true,
   createdAt: "2024-12-01T10:30:00Z",

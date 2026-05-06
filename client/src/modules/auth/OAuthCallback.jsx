@@ -1,0 +1,72 @@
+import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { setOAuthData } from '../../features/auth/authSlice';
+import { useToast } from '../../shared/components';
+
+const OAuthCallback = () => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { success, error: showError } = useToast();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    const error = params.get('error');
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+    if (error) {
+      showError(decodeURIComponent(error));
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    if (!token) {
+      showError('No authentication token received');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Store token temporarily and fetch user
+    const fetchUser = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await response.json();
+
+        if (data.success && data.user) {
+          // save everything to Redux & storage
+          dispatch(setOAuthData({ token, user: data.user, rememberMe: true }));
+          success(`Welcome ${data.user.name}!`);
+          navigate('/dashboard', { replace: true });
+        } else {
+          throw new Error(data.message || 'Failed to fetch user');
+        }
+      } catch (err) {
+        console.error(err);
+        showError('Could not complete login. Please try again.');
+        navigate('/login', { replace: true });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUser();
+  }, [dispatch, navigate, location, showError, success]);
+
+  return (
+    <div className="min-h-screen flex justify-center items-center bg-[radial-gradient(circle_at_top_left,#0f172a,#020617)]">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+        <p className="mt-4 text-white">Completing sign in...</p>
+      </div>
+    </div>
+  );
+};
+
+export default OAuthCallback;

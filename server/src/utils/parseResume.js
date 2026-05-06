@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { PDFParse } from "pdf-parse";
+import mammoth from "mammoth";
 
 const skillKeywords = [
   "JavaScript",
@@ -104,19 +105,26 @@ const extractSkills = (text) => {
 
 export const parseResume = async (filePath) => {
   const extension = path.extname(filePath).toLowerCase();
-  if (extension !== ".pdf") {
-    throw new Error("Only PDF parsing is supported on /analyze right now");
-  }
+  let text = "";
 
-  const fileBuffer = await fs.readFile(filePath);
-  const parser = new PDFParse({ data: fileBuffer });
-  let parsed;
-  try {
-    parsed = await parser.getText();
-  } finally {
-    await parser.destroy();
+  if (extension === ".pdf") {
+    const fileBuffer = await fs.readFile(filePath);
+    const parser = new PDFParse({ data: fileBuffer });
+    try {
+      const parsed = await parser.getText();
+      text = normalizeWhitespace(parsed.text || "");
+    } finally {
+      await parser.destroy();
+    }
+  } else if (extension === ".docx") {
+    const result = await mammoth.extractRawText({ path: filePath });
+    text = normalizeWhitespace(result.value || "");
+  } else if (extension === ".txt") {
+    const rawText = await fs.readFile(filePath, "utf-8");
+    text = normalizeWhitespace(rawText || "");
+  } else {
+    throw new Error("Only PDF, DOCX, and TXT parsing is supported on /analyze right now");
   }
-  const text = normalizeWhitespace(parsed.text || "");
 
   if (!text) {
     throw new Error("Unable to extract text from resume");
@@ -134,20 +142,33 @@ export const parseResume = async (filePath) => {
   const allUrls = toUniqueList((text.match(urlRegex) || []).map(cleanupUrl).map(normalizeUrl));
   const portfolios = allUrls.filter((url) => isLikelyPortfolioUrl(url));
 
+  const name = extractName(lines);
+  const email = emails[0];
+  const phone = phones[0];
+  const skills = extractSkills(text);
+  const education = extractSectionLines(lines, sectionHeaders.education);
+  const experience = extractSectionLines(lines, sectionHeaders.experience);
+  const projects = extractSectionLines(lines, sectionHeaders.projects);
+  const certifications = extractSectionLines(lines, sectionHeaders.certifications);
+  const linkedin = linkedins[0];
+  const github = githubs[0];
+  const portfolio = portfolios[0];
+  const keywords = extractSkills(text);
+
   return {
-    name: extractName(lines),
-    email: emails[0] || null,
-    phone: phones[0] || null,
-    skills: extractSkills(text),
-    education: extractSectionLines(lines, sectionHeaders.education),
-    experience: extractSectionLines(lines, sectionHeaders.experience),
-    projects: extractSectionLines(lines, sectionHeaders.projects),
-    certifications: extractSectionLines(lines, sectionHeaders.certifications),
-    linkedin: linkedins[0] || null,
-    github: githubs[0] || null,
-    portfolio: portfolios[0] || null,
-    keywords: extractSkills(text),
-    extractedTextLength: text.length,
-    resumeText: text,
+    name: name || "",
+    email: typeof email === "string" ? email : null,   
+    phone: phone || null,
+    skills: skills || [],
+    education: education || [],
+    experience: experience || [],
+    projects: projects || [],
+    certifications: certifications || [],
+    linkedin: linkedin || null,
+    github: github || null,
+    portfolio: portfolio || null,
+    keywords: keywords || [],
+    extractedTextLength: text.length || 0,
+    resumeText: text || "",
   };
 };

@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from "react";
-import { UploadCloud, CheckCircle2 } from "lucide-react";
-import Button from "../../../shared/landing_components/Button";
+import { CheckCircle2, UploadCloud } from "lucide-react";
+import { useCallback, useState } from "react";
 import { useToast } from "../../../shared/components";
+import Button from "../../../shared/landing/Button";
 
 const DragDropUpload = ({ onFileUpload }) => {
   const { success, warning } = useToast();
@@ -17,7 +17,10 @@ const DragDropUpload = ({ onFileUpload }) => {
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
     const fileName = file.name?.toLowerCase() || "";
-    const hasValidExtension = fileName.endsWith(".pdf") || fileName.endsWith(".doc") || fileName.endsWith(".docx");
+    const hasValidExtension =
+      fileName.endsWith(".pdf") ||
+      fileName.endsWith(".doc") ||
+      fileName.endsWith(".docx");
 
     return validMimeTypes.includes(file.type) || hasValidExtension;
   };
@@ -33,7 +36,7 @@ const DragDropUpload = ({ onFileUpload }) => {
       success(`${file.name} uploaded. Starting analysis.`);
       onFileUpload(file);
     },
-    [onFileUpload, success, warning]
+    [onFileUpload, success, warning],
   );
 
   const handleDragEnter = useCallback((e) => {
@@ -64,7 +67,7 @@ const DragDropUpload = ({ onFileUpload }) => {
         processFileUpload(file);
       }
     },
-    [processFileUpload]
+    [processFileUpload],
   );
 
   const handleFileInput = useCallback(
@@ -74,7 +77,7 @@ const DragDropUpload = ({ onFileUpload }) => {
         processFileUpload(file);
       }
     },
-    [processFileUpload]
+    [processFileUpload],
   );
 
   const handlePaste = useCallback(
@@ -88,7 +91,7 @@ const DragDropUpload = ({ onFileUpload }) => {
         }
       }
     },
-    [processFileUpload]
+    [processFileUpload],
   );
 
   return (
@@ -105,19 +108,32 @@ const DragDropUpload = ({ onFileUpload }) => {
       onDrop={handleDrop}
       onPaste={handlePaste}
     >
-      <div className={`p-6 rounded-full transition-all duration-300 ${isDragActive ? "bg-primary/20 scale-110" : "bg-primary/10"}`}>
-        <UploadCloud className={`w-14 h-14 transition-colors duration-300 ${isDragActive ? "text-primary" : "text-primary/70"}`} />
+      <div
+        className={`p-6 rounded-full transition-all duration-300 ${isDragActive ? "bg-primary/20 scale-110" : "bg-primary/10"}`}
+      >
+        <UploadCloud
+          className={`w-14 h-14 transition-colors duration-300 ${isDragActive ? "text-primary" : "text-primary/70"}`}
+        />
       </div>
-      
+
       <div className="text-center space-y-2">
         <p className="text-2xl font-heading font-bold text-text-main italic">
           Drag & Drop your resume here
         </p>
         <p className="text-text-muted">
-          Supported formats: <span className="text-primary font-medium">PDF, DOCX</span>
+          Supported formats:{" "}
+          <span className="text-primary font-medium">PDF, DOCX</span>
         </p>
         <p className="text-xs text-primary/60 pt-2 font-medium opacity-80">
-          Or press <kbd className="px-2 py-1 bg-surface border border-border rounded text-text-main mx-1 shadow-sm">Ctrl</kbd> + <kbd className="px-2 py-1 bg-surface border border-border rounded text-text-main mx-1 shadow-sm">V</kbd> to paste
+          Or press{" "}
+          <kbd className="px-2 py-1 bg-surface border border-border rounded text-text-main mx-1 shadow-sm">
+            Ctrl
+          </kbd>{" "}
+          +{" "}
+          <kbd className="px-2 py-1 bg-surface border border-border rounded text-text-main mx-1 shadow-sm">
+            V
+          </kbd>{" "}
+          to paste
         </p>
       </div>
 
@@ -137,8 +153,8 @@ const DragDropUpload = ({ onFileUpload }) => {
           onChange={handleFileInput}
           title="Browse file"
         />
-        <Button 
-          variant="secondary" 
+        <Button
+          variant="secondary"
           size="lg"
           className="px-10 group-hover:scale-105 transition-transform duration-300"
         >

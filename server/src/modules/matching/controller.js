@@ -1,0 +1,72 @@
+import * as matchingService from "./service.js";
+import * as resumeService from "../resumes/service.js";
+import { parseResume } from "../../utils/parseResume.js";
+import asyncHandler from "../../utils/asyncHandler.js";
+import AppError from "../../utils/AppError.js";
+
+/**
+ * Handle matching evaluation.
+ * Supports both library reuse (no file) and fresh upload (file present).
+ * 
+ * @route POST /api/matching/evaluate
+ */
+export const evaluate = asyncHandler(async (req, res, next) => {
+  let resume;
+
+  if (req.file) {
+    // 1. Fresh upload-then-parse flow
+    // If a file is provided, we parse it and update the user's stored resume
+    const parsedData = await parseResume(req.file.path);
+    
+    resume = await resumeService.upsertResume(req.user._id, {
+      ...parsedData,
+      file: {
+        originalName: req.file.originalname,
+        storedName: req.file.filename,
+        path: req.file.path,
+        size: `${(req.file.size / 1024).toFixed(2)} KB`,
+        mimeType: req.file.mimetype,
+      },
+    }, true);
+  } else {
+    // 2. Resume library reuse flow
+    // If no file is provided, we use the user's latest parsed resume record
+    // We include resumeText for the matching pipeline (keyword evaluation)
+    resume = await resumeService.getLatestResume(req.user._id, true);
+    if (!resume) {
+      return next(new AppError("No resume found in your library. Please upload one to begin matching.", 404));
+    }
+  }
+
+  // 3. Perform matching against all open jobs
+  const result = await matchingService.evaluateMatches(req.user, resume);
+
+  res.status(200).json({
+    success: true,
+    message: "Job matching evaluation completed successfully",
+    data: result,
+  });
+});
+
+/**
+ * Fetch the most recent job recommendations for the user.
+ * 
+ * @route GET /api/matching/recommended
+ */
+export const getRecommended = asyncHandler(async (req, res, next) => {
+  const result = await matchingService.getLatestRecommendations(req.user._id);
+
+  if (!result) {
+    return res.status(200).json({
+      success: true,
+      message: "No recommendations found. Run an evaluation to see matches.",
+      data: null,
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Latest recommendations fetched successfully",
+    data: result,
+  });
+});

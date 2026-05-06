@@ -34,7 +34,7 @@ test("partial match returns ratio-based score", () => {
   assert.equal(result.experienceGap, 2);
   assert.ok(
     result.feedback.includes(
-      "Candidate experience is significantly below job requirements",
+      "Candidate has significantly less experience than required",
     ),
   );
 });

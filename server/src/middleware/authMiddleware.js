@@ -28,7 +28,7 @@ export const protect = asyncHandler(async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // 3) Check if user still exists
-    const currentUser = await User.findById(decoded.userId);
+    const currentUser = await User.findById(decoded.userId).select("-password");
     if (!currentUser) {
       return next(
         new AppError("The user belonging to this token no longer exists.", 401)

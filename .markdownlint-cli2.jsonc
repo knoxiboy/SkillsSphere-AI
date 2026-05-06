@@ -1,0 +1,24 @@
+{
+  // Markdownlint configuration for SkillsSphere-AI
+  "config": {
+    "default": true,
+    // MD013 — line length: long lines common in docs/tables
+    "MD013": false,
+    // MD033 — no inline HTML: README uses HTML anchors/badges
+    "MD033": false,
+    // MD041 — first line heading: issue/PR templates start with ##
+    "MD041": false,
+    // MD022 — blanks around headings: pre-existing README style
+    "MD022": false,
+    // MD024 — duplicate headings: README has repeated section names
+    "MD024": false,
+    // MD029 — ordered list prefix: README uses non-sequential numbering
+    "MD029": false,
+    // MD032 — blanks around lists: pre-existing README style
+    "MD032": false
+  },
+  "ignores": [
+    "**/node_modules/**",
+    "**/CHANGELOG.md"
+  ]
+}

@@ -14,9 +14,18 @@ const handleDuplicateFieldsDB = (err) => {
 };
 
 const handleValidationErrorDB = (err) => {
-  const errors = Object.values(err.errors).map((el) => el.message);
-  const message = `Invalid input data. ${errors.join(". ")}`;
-  return new AppError(message, 400);
+  // Build field-level errors object for frontend consumption
+  const errors = {};
+  Object.keys(err.errors).forEach((key) => {
+    errors[key] = err.errors[key].message;
+  });
+  
+  const messages = Object.values(err.errors).map((el) => el.message);
+  const message = `Invalid input data. ${messages.join(". ")}`;
+  
+  const error = new AppError(message, 400);
+  error.errors = errors; // Attach field-level errors
+  return error;
 };
 
 const globalErrorHandler = (err, req, res, next) => {
@@ -26,6 +35,14 @@ const globalErrorHandler = (err, req, res, next) => {
   if (error.name === "CastError") error = handleCastErrorDB(error);
   if (error.code === 11000) error = handleDuplicateFieldsDB(error);
   if (error.name === "ValidationError") error = handleValidationErrorDB(error);
+  
+  // Preserve field-level errors from Mongoose if present
+  if (err.errors && !error.errors) {
+    error.errors = {};
+    Object.keys(err.errors).forEach((key) => {
+      error.errors[key] = err.errors[key].message;
+    });
+  }
 
   error.statusCode = error.statusCode || 500;
   error.status = error.status || "error";
@@ -45,6 +62,7 @@ const globalErrorHandler = (err, req, res, next) => {
         success: false,
         status: error.status,
         message: error.message,
+        errors: error.errors || {}, // Include field-level errors if available
       });
     } else {
       console.error("ERROR 💥", error);

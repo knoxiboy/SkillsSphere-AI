@@ -34,8 +34,19 @@ module.exports = {
         "text-muted": "#9CA3AF",
         border: "#1F2937",
       },
+      keyframes: {
+        scaleIn: {
+          from: { transform: 'scaleX(0)' },
+          to: { transform: 'scaleX(1)' },
+        },
+        slideFadeIn: {
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
       animation: {
         spin: "spin 0.75s linear infinite",
+        scaleIn: "scaleIn 0.3s ease-out forwards",
+        slideFadeIn: "slideFadeIn 0.5s ease forwards",
       },
     },
   },

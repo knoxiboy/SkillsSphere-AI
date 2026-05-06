@@ -9,6 +9,10 @@ lerna-debug.log*
 # Dependency directories
 node_modules/
 
+# Local runtime/cache data
+server/.mongo-data/
+server/.npm-cache/
+
 # Environment files
 .env
 .env.*
@@ -37,3 +41,6 @@ venv/
 
 # Test artifacts
 .pytest_cache/
+
+# Local emergency scripts
+server/reset-auth.js

@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 
 const resumeSchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
     name: {
       type: String,
       default: null,
@@ -54,6 +59,11 @@ const resumeSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    resumeText: {
+      type: String,
+      default: null,
+      select: false, // Don't include in queries by default for privacy
+    },
     jobSkills: {
       type: [String],
       default: [],
@@ -91,6 +101,34 @@ const resumeSchema = new mongoose.Schema(
       candidateExperience: Number,
       requiredExperience: Number,
       experienceGap: Number,
+    },
+    evaluatorBreakdown: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    aggregatedScore: {
+      type: Number,
+      default: null,
+    },
+    classification: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    gapAnalysis: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    impactMatch: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    atsOptimization: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    techStandard: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
   },
   {

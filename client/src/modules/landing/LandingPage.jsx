@@ -1,9 +1,9 @@
-import React from 'react';
-import Navbar from '../../shared/landing_components/Navbar.jsx';
-import Hero from './components/jsx/Hero';
-import Features from './components/jsx/Features';
-import TargetUsers from './components/jsx/TargetUsers';
-import CTA from './components/jsx/CTA';
+import Navbar from "../../shared/landing/Navbar.jsx";
+import CTA from "./components/CTA";
+import Features from "./components/Features";
+import Footer from "./components/Footer";
+import Hero from "./components/Hero";
+import TargetUsers from "./components/TargetUsers";
 
 const LandingPage = () => {
   return (
@@ -13,6 +13,7 @@ const LandingPage = () => {
       <Features />
       <TargetUsers />
       <CTA />
+      <Footer />
     </div>
   );
 };

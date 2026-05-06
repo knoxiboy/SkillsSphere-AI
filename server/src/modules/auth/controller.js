@@ -1,27 +1,26 @@
-import { 
-  validateRegisterInput, 
-  validateVerifyEmailInput, 
-  validateForgotPasswordInput, 
-  validateResetPasswordInput,
+import {
+  validateForgotPasswordInput,
+  validateLoginInput,
+  validateRegisterInput,
   validateResendOTPInput,
-  validateLoginInput
+  validateResetPasswordInput,
+  validateVerifyEmailInput,
 } from "../../validations/authValidation.js";
 
-import { 
-  registerUserAndIssueToken, 
-  verifyUserEmail, 
-  forgotPasswordRequest, 
-  resetUserPassword,
-  resendUserOTP,
+import {
+  forgotPasswordRequest,
   loginUser,
-  verifyGoogleToken
+  registerUserAndIssueToken,
+  resendUserOTP,
+  resetUserPassword,
+  verifyGoogleToken,
+  verifyUserEmail,
 } from "./service.js";
 
-import asyncHandler from "../../utils/asyncHandler.js";
-import AppError from "../../utils/AppError.js";
-import User from "../../database/models/User.js";
 import jwt from "jsonwebtoken";
-
+import User from "../../database/models/User.js";
+import AppError from "../../utils/AppError.js";
+import asyncHandler from "../../utils/asyncHandler.js";
 
 // 📝 Register User
 export const register = asyncHandler(async (req, res, next) => {
@@ -35,12 +34,12 @@ export const register = asyncHandler(async (req, res, next) => {
 
   return res.status(201).json({
     success: true,
-    message: "User registered successfully. Please check your email for verification code.",
+    message:
+      "User registered successfully. Please check your email for verification code.",
     token: authResult.token,
-    user: authResult.user
+    user: authResult.user,
   });
 });
-
 
 // 📧 Verify Email
 export const verifyEmail = asyncHandler(async (req, res, next) => {
@@ -50,10 +49,12 @@ export const verifyEmail = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid verification data", 400));
   }
 
-  const result = await verifyUserEmail(validation.data.email, validation.data.otp);
+  const result = await verifyUserEmail(
+    validation.data.email,
+    validation.data.otp,
+  );
   return res.status(200).json(result);
 });
-
 
 // 🔑 Forgot Password
 export const forgotPassword = asyncHandler(async (req, res, next) => {
@@ -67,7 +68,6 @@ export const forgotPassword = asyncHandler(async (req, res, next) => {
   return res.status(200).json(result);
 });
 
-
 // 🔄 Reset Password
 export const resetPassword = asyncHandler(async (req, res, next) => {
   const validation = validateResetPasswordInput(req.body);
@@ -77,14 +77,13 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
   }
 
   const result = await resetUserPassword(
-    validation.data.email, 
-    validation.data.otp, 
-    validation.data.newPassword
+    validation.data.email,
+    validation.data.otp,
+    validation.data.newPassword,
   );
 
   return res.status(200).json(result);
 });
-
 
 // 🔁 Resend OTP
 export const resendOTP = asyncHandler(async (req, res, next) => {
@@ -105,12 +104,15 @@ export const login = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid login payload", 400));
   }
 
-  const result = await loginUser(validation.data.email, validation.data.password);
+  const result = await loginUser(
+    validation.data.email,
+    validation.data.password,
+  );
 
   return res.status(200).json({
     success: true,
     message: "Login successful",
-    ...result
+    ...result,
   });
 });
 
@@ -148,7 +150,7 @@ export const googleLogin = asyncHandler(async (req, res, next) => {
     process.env.JWT_SECRET,
     {
       expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-    }
+    },
   );
 
   return res.status(200).json({
@@ -161,5 +163,105 @@ export const googleLogin = asyncHandler(async (req, res, next) => {
       email: user.email,
       role: user.role,
     },
+  });
+});
+
+// Google OAuth callback (redirect flow)
+export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
+  const { code, state } = req.query;
+  const frontendRedirectBase =
+    process.env.FRONTEND_URL || "http://localhost:5173";
+  const fallbackCallbackUrl = `${frontendRedirectBase}/auth/callback`;
+  let callbackUrl = fallbackCallbackUrl;
+
+  if (typeof state === "string" && state.length > 0) {
+    try {
+      const decoded = Buffer.from(decodeURIComponent(state), "base64").toString(
+        "utf8",
+      );
+      const decodedUrl = new URL(decoded);
+      const fallbackOrigin = new URL(frontendRedirectBase).origin;
+      const isAllowedLocalhost =
+        decodedUrl.hostname === "localhost" ||
+        decodedUrl.hostname === "127.0.0.1";
+
+      if (decodedUrl.origin === fallbackOrigin || isAllowedLocalhost) {
+        callbackUrl = decodedUrl.toString();
+      }
+    } catch {
+      callbackUrl = fallbackCallbackUrl;
+    }
+  }
+
+  if (!code) {
+    return res.redirect(
+      `${callbackUrl}?error=${encodeURIComponent("No code received")}`,
+    );
+  }
+
+  // Exchange code for access token
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+      grant_type: "authorization_code",
+    }),
+  });
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+
+  if (!accessToken) {
+    return res.redirect(
+      `${callbackUrl}?error=${encodeURIComponent("Failed to get access token")}`,
+    );
+  }
+
+  // Get user info from Google
+  const userRes = await fetch(
+    `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${accessToken}`,
+  );
+  const googleUser = await userRes.json();
+
+  // Find or create user in your DB
+  let user = await User.findOne({ email: googleUser.email });
+  if (!user) {
+    user = await User.create({
+      name: googleUser.name,
+      email: googleUser.email,
+      profilePic: googleUser.picture,
+      role: "student",
+      provider: "google",
+      isVerified: true,
+    });
+  }
+
+  // Generate your app's JWT
+  const jwtToken = jwt.sign(
+    { userId: user._id.toString(), role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
+  );
+
+  // Redirect to frontend with ONLY the token (no user data in URL)
+  res.redirect(`${callbackUrl}?token=${jwtToken}`);
+});
+
+// 👤 Get Current User
+export const getMe = asyncHandler(async (req, res, next) => {
+  res.status(200).json({
+    success: true,
+    user: req.user,
+  });
+});
+
+// 🚪 Logout
+export const logout = asyncHandler(async (req, res, next) => {
+  res.status(200).json({
+    success: true,
+    message: "Logged out successfully",
   });
 });

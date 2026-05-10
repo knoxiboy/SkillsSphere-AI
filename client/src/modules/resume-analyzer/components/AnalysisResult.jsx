@@ -144,43 +144,20 @@ const AnalysisResult = ({ result, file, onReset }) => {
             </div>
             <h3 className="font-bold text-text-main">ATS Readiness</h3>
           </div>
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             {checklist.map((item, i) => (
-              <div key={i} className="flex flex-col p-3 bg-dark-bg/40 rounded-xl border border-border/50">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-text-muted">{item.label}</span>
-                  {item.status ? (
-                    <CheckCircle2 className="w-4 h-4 text-secondary" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-red-400" />
-                  )}
-                </div>
-                {!item.status && (
-                  <span className="text-[10px] text-red-400 mt-1.5">{item.reason}</span>
+              <div key={i} className="flex items-center gap-2">
+                {item.status ? (
+                  <CheckCircle2 className="w-4 h-4 text-secondary flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                 )}
+                <span className={`text-xs font-medium ${item.status ? "text-text-muted" : "text-red-400"}`}>
+                  {item.label}
+                </span>
               </div>
             ))}
           </div>
-
-          {/* Missing Tech Keywords */}
-          {missingTechKeywords.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border/50">
-              <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mb-2">
-                Add These Keywords to Boost Score
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {missingTechKeywords.map((item, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 bg-yellow-400/5 border border-yellow-400/20 text-yellow-400 text-[10px] font-bold rounded-md capitalize"
-                    title={item.domain}
-                  >
-                    {item.keyword}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -278,6 +255,26 @@ const AnalysisResult = ({ result, file, onReset }) => {
                   </div>
                 )}
               </div>
+
+              {/* Missing Tech Standard Keywords */}
+              {missingTechKeywords.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border/50">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mb-2">
+                    Add These Keywords to Boost Score
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {missingTechKeywords.map((item, i) => (
+                      <span
+                        key={i}
+                        className="px-2.5 py-1 bg-yellow-400/5 border border-yellow-400/20 text-yellow-400 text-[10px] font-bold rounded-lg capitalize transition-colors hover:bg-yellow-400/10"
+                        title={item.domain}
+                      >
+                        {item.keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
            </div>
 
            {/* Preview */}

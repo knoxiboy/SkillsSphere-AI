@@ -206,7 +206,7 @@ const DashboardPage = () => {
   }, [recruiterJobs, isRecruiter]);
 
   return (
-      <main className="min-h-screen bg-white dark:bg-[radial-gradient(circle_at_top_left,#0f172a,#020617)] p-3 sm:p-5 pt-20 sm:pt-28 text-gray-900 dark:text-slate-100">
+    <main className="min-h-screen bg-white dark:bg-[radial-gradient(circle_at_top_left,#0f172a,#020617)] p-3 sm:p-5 pt-20 sm:pt-28 text-gray-900 dark:text-slate-100">
       <Navbar />
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 sm:gap-8 py-6 sm:py-8 px-0 sm:px-2">
@@ -217,7 +217,7 @@ const DashboardPage = () => {
               <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></div>
               <p className="text-xs sm:text-sm font-medium text-blue-300 uppercase tracking-wider">Professional Intelligence</p>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+            <h1 className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-slate-400">
               Welcome, {user?.name || "Learner"}
             </h1>
           </div>
@@ -227,7 +227,7 @@ const DashboardPage = () => {
             size="md"
             onClick={handleLogout}
             leftIcon={<LogOut size={16} />}
-            className="border-slate-700/50 bg-slate-900/40 text-gray-700 dark:text-slate-300 hover:bg-slate-800 hover:text-white backdrop-blur-sm w-full sm:w-auto transition-all duration-300"
+            className="border-gray-300 dark:border-slate-700/50 bg-gray-100 dark:bg-slate-900/40 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white backdrop-blur-sm w-full sm:w-auto transition-all duration-300"
           >
             Logout
           </Button>
@@ -637,7 +637,7 @@ const DashboardPage = () => {
                 <TrendingUp size={20} className="text-blue-400" />
                 {isStudent ? "Improve Profile" : "Recruitment Hub"}
               </h3>
-              <p className="text-sm text-blue-100/70 mb-6">
+              <p className="text-sm text-gray-700 dark:text-blue-100/70 mb-6">
                 {isStudent 
                   ? "Take the next step in your career journey with our AI-driven tools."
                   : "Manage your hiring pipeline and find the perfect candidates."}
@@ -670,7 +670,7 @@ const DashboardPage = () => {
 
                     <Link
                       to="/my-applications"
-                      className="flex items-center justify-between group/link w-full p-4 rounded-xl bg-white/10 border border-white/10 hover:bg-white/20 transition-all"
+                      className="flex items-center justify-between group/link w-full p-4 rounded-xl bg-white/10 border border-gray-200 dark:border-white/10 hover:bg-white/20 transition-all"
                     >
                       <div className="flex items-center gap-3">
                         <Briefcase size={18} className="text-violet-300" />

@@ -24,7 +24,7 @@ export const getJobs = async (filters = {}, token) => {
  * Apply to a job posting
  * @param {string} jobId - Job ID
  * @param {string} token - Auth token
- * @param {Object} options - Optional fields (resumeId, coverNote)
+ * @param {Object} options - Application fields (resumeLink, coverNote)
  * @returns {Promise<Object>} - API response
  */
 export const applyToJob = async (jobId, token, options = {}) => {

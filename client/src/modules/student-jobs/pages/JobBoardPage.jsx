@@ -7,16 +7,18 @@ import ErrorState from "../../../shared/components/ErrorState";
 import EmptyState from "../../../shared/components/EmptyState";
 import { JobViewerCard } from "../../../shared/components";
 import JobFilters from "../components/JobFilters";
+import JobApplyForm from "../components/JobApplyForm";
 import { getJobs, applyToJob } from "../services/jobService";
 
 const JobBoardPage = () => {
-  const { token } = useSelector((state) => state.auth);
+  const { token, user } = useSelector((state) => state.auth);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({});
   const [appliedJobIds, setAppliedJobIds] = useState(new Set());
   const [applyingJobId, setApplyingJobId] = useState(null);
+  const [applyModalJob, setApplyModalJob] = useState(null);
 
   const fetchJobs = useCallback(async (currentFilters) => {
     setLoading(true);
@@ -39,16 +41,22 @@ const JobBoardPage = () => {
     setFilters(newFilters);
   };
 
-  const handleApply = async (job) => {
-    const jobId = job._id || job.id;
+  const handleApply = (job) => {
+    setApplyModalJob(job);
+  };
+
+  const handleApplySubmit = async ({ resumeLink, coverNote }) => {
+    const jobId = applyModalJob._id || applyModalJob.id;
     setApplyingJobId(jobId);
     try {
-      await applyToJob(jobId, token);
+      await applyToJob(jobId, token, { resumeLink, coverNote });
       setAppliedJobIds((prev) => new Set([...prev, jobId]));
+      setApplyModalJob(null);
     } catch (err) {
       const msg = err.message || err.data?.message || "Failed to apply";
       if (msg.includes("already applied")) {
         setAppliedJobIds((prev) => new Set([...prev, jobId]));
+        setApplyModalJob(null);
       } else {
         alert(msg);
       }
@@ -137,6 +145,16 @@ const JobBoardPage = () => {
           </div>
         </div>
       </div>
+      {/* Apply Form Modal */}
+      {applyModalJob && (
+        <JobApplyForm
+          job={applyModalJob}
+          user={user}
+          onSubmit={handleApplySubmit}
+          onClose={() => setApplyModalJob(null)}
+          isSubmitting={!!applyingJobId}
+        />
+      )}
     </main>
   );
 };

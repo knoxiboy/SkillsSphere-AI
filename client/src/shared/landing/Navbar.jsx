@@ -115,8 +115,11 @@ const Navbar = () => {
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className="flex items-center gap-3 hover:bg-[var(--surface-hover)] p-2 rounded-xl transition-colors duration-200"
               >
-                <div className="w-9 h-9 rounded-full bg-[var(--surface-soft)] flex items-center justify-center text-[var(--primary)] font-bold border border-[var(--border)]">
-                  {user?.name?.charAt(0).toUpperCase() || <User size={18} />}
+                <div className="w-9 h-9 rounded-full bg-[var(--surface-soft)] flex items-center justify-center text-[var(--primary)] font-bold border border-[var(--border)] overflow-hidden flex-shrink-0">
+                  {user?.profilePic
+                    ? <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+                    : (user?.name?.charAt(0).toUpperCase() || <User size={18} />)
+                  }
                 </div>
                 <div className="text-left hidden xl:block">
                   <p className="text-sm font-medium text-[var(--text-main)]">{user?.name || 'User'}</p>
@@ -263,8 +266,11 @@ const Navbar = () => {
             {isAuthenticated ? (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3 px-2 mb-2">
-                  <div className="w-10 h-10 rounded-full bg-[var(--surface-soft)] flex items-center justify-center text-[var(--primary)] font-bold border border-[var(--border)]">
-                    {user?.name?.charAt(0).toUpperCase() || <User size={20} />}
+                  <div className="w-10 h-10 rounded-full bg-[var(--surface-soft)] flex items-center justify-center text-[var(--primary)] font-bold border border-[var(--border)] overflow-hidden flex-shrink-0">
+                    {user?.profilePic
+                      ? <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+                      : (user?.name?.charAt(0).toUpperCase() || <User size={20} />)
+                    }
                   </div>
                   <div className="overflow-hidden">
                     <p className="text-sm font-medium text-[var(--text-main)] truncate">{user?.name || 'User'}</p>

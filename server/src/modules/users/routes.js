@@ -1,16 +1,22 @@
 import express from "express";
 import { protect } from "../../middleware/authMiddleware.js";
-import { updateProfile, deleteProfile } from "./controller.js";
+import { uploadAvatarMiddleware } from "../../middleware/uploadAvatar.js";
+import { updateProfile, deleteProfile, uploadAvatar, removeAvatar } from "./controller.js";
 
 const router = express.Router();
 
-// All user routes require authentication
 router.use(protect);
 
-// 👤 Update Current User Profile
+// 👤 Update profile name
 router.put("/me", updateProfile);
 
-// 🗑️ Delete Current User Account
+// 🖼️ Upload / replace profile photo
+router.put("/me/avatar", uploadAvatarMiddleware, uploadAvatar);
+
+// 🗑️ Remove profile photo
+router.delete("/me/avatar", removeAvatar);
+
+// 🗑️ Delete account
 router.delete("/me", deleteProfile);
 
 export default router;

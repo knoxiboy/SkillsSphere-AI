@@ -1,6 +1,8 @@
 import User from "../../database/models/User.js";
 import AppError from "../../utils/AppError.js";
 import asyncHandler from "../../utils/asyncHandler.js";
+import fs from "fs";
+import path from "path";
 
 /**
  * @desc    Update user profile details
@@ -14,7 +16,6 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
     return next(new AppError("Please provide a valid name (at least 2 characters)", 400));
   }
 
-  // Update user in database
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
     { name: name.trim() },
@@ -33,6 +34,62 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Upload / replace profile photo
+ * @route   PUT /api/users/me/avatar
+ * @access  Private
+ */
+export const uploadAvatar = asyncHandler(async (req, res, next) => {
+  if (!req.file) {
+    return next(new AppError("No image file provided", 400));
+  }
+
+  const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+  const profilePic = `${baseUrl}/uploads/avatars/${req.file.filename}`;
+
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user._id,
+    { profilePic },
+    { new: true }
+  ).select("-password -__v");
+
+  if (!updatedUser) {
+    return next(new AppError("User not found", 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Profile photo updated",
+    user: updatedUser,
+  });
+});
+
+/**
+ * @desc    Remove profile photo
+ * @route   DELETE /api/users/me/avatar
+ * @access  Private
+ */
+export const removeAvatar = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user._id);
+  if (!user) return next(new AppError("User not found", 404));
+
+  // Delete file from disk if it's a local upload
+  if (user.profilePic && user.profilePic.includes("/uploads/avatars/")) {
+    const filename = path.basename(user.profilePic);
+    const filePath = path.join(process.cwd(), "src", "uploads", "avatars", filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+
+  user.profilePic = null;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Profile photo removed",
+    user: { ...user.toObject(), password: undefined, __v: undefined },
+  });
+});
+
+/**
  * @desc    Delete user account completely
  * @route   DELETE /api/users/me
  * @access  Private
@@ -44,9 +101,6 @@ export const deleteProfile = asyncHandler(async (req, res, next) => {
     return next(new AppError("User not found", 404));
   }
 
-  // We could also delete related records here (e.g., resumes, applications, jobs)
-  // But for the scope of this issue, we start with deleting the user.
-  // A robust implementation might use a pre('remove') hook on the User model.
   await User.findByIdAndDelete(req.user._id);
 
   res.status(200).json({

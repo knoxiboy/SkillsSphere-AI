@@ -15,12 +15,18 @@ import {
   resetUserPassword,
   verifyGoogleToken,
   verifyUserEmail,
+  findOrCreateGoogleUser,
+  LOCAL_EMAIL_REGISTERED_MESSAGE,
 } from "./service.js";
 
 import jwt from "jsonwebtoken";
-import User from "../../database/models/User.js";
 import AppError from "../../utils/AppError.js";
 import asyncHandler from "../../utils/asyncHandler.js";
+import {
+  getGoogleOAuthConfig,
+  GOOGLE_OAUTH_NOT_CONFIGURED_MESSAGE,
+  isGoogleOAuthConfigured,
+} from "../../config/googleOAuth.js";
 
 // 📝 Register User
 export const register = asyncHandler(async (req, res, next) => {
@@ -124,22 +130,8 @@ export const googleLogin = asyncHandler(async (req, res, next) => {
     return next(new AppError("Google token is required", 400));
   }
 
-  // ✅ Verify Google token
   const googleUser = await verifyGoogleToken(token);
-
-  // 🔍 Check if user exists
-  let user = await User.findOne({ email: googleUser.email });
-
-  // 🟢 Create new user if not exists
-  if (!user) {
-    user = await User.create({
-      name: googleUser.name,
-      email: googleUser.email,
-      profilePic: googleUser.picture,
-      role: "student",
-      provider: "google",
-    });
-  }
+  const user = await findOrCreateGoogleUser(googleUser);
 
   // 🔐 Generate JWT
   const jwtToken = jwt.sign(
@@ -170,7 +162,7 @@ export const googleLogin = asyncHandler(async (req, res, next) => {
 export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
   const { code, state } = req.query;
   const frontendRedirectBase =
-    process.env.FRONTEND_URL || "http://localhost:5173";
+    process.env.FRONTEND_URL || "http://localhost:5174";
   const fallbackCallbackUrl = `${frontendRedirectBase}/auth/callback`;
   let callbackUrl = fallbackCallbackUrl;
 
@@ -199,15 +191,23 @@ export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
     );
   }
 
+  if (!isGoogleOAuthConfigured()) {
+    return res.redirect(
+      `${callbackUrl}?error=${encodeURIComponent(GOOGLE_OAUTH_NOT_CONFIGURED_MESSAGE)}`,
+    );
+  }
+
+  const { clientId, clientSecret, redirectUri } = getGoogleOAuthConfig();
+
   // Exchange code for access token
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
   });
@@ -226,17 +226,17 @@ export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
   );
   const googleUser = await userRes.json();
 
-  // Find or create user in your DB
-  let user = await User.findOne({ email: googleUser.email });
-  if (!user) {
-    user = await User.create({
-      name: googleUser.name,
-      email: googleUser.email,
-      profilePic: googleUser.picture,
-      role: "student",
-      provider: "google",
-      isVerified: true,
-    });
+  let user;
+  try {
+    user = await findOrCreateGoogleUser(googleUser);
+  } catch (error) {
+    const message =
+      error instanceof AppError
+        ? error.message
+        : LOCAL_EMAIL_REGISTERED_MESSAGE;
+    return res.redirect(
+      `${callbackUrl}?error=${encodeURIComponent(message)}`,
+    );
   }
 
   // Generate your app's JWT

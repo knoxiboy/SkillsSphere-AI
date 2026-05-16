@@ -45,7 +45,6 @@ import SuggestionItem from "./components/SuggestionItem";
 import StatCard from "./components/StatCard";
 import PerformanceTrend from "./components/PerformanceTrend";
 import VersionComparisonModal from "./components/VersionComparisonModal";
-import VersionComparisonModal from "./components/VersionComparisonModal";
 
 const ROLE_LABELS = {
   student: "Student",

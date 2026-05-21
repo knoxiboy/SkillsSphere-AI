@@ -7,6 +7,7 @@ export default function CoverLetterModal({ isOpen, onClose, initialText, onRegen
   const [copied, setCopied] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [tone, setTone] = useState("Professional");
+  const [language, setLanguage] = useState("English");
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export default function CoverLetterModal({ isOpen, onClose, initialText, onRegen
     if (!onRegenerate) return;
     setIsRegenerating(true);
     try {
-      const newText = await onRegenerate(tone);
+      const newText = await onRegenerate(tone, language);
       if (newText) {
         setText(newText);
       }
@@ -96,6 +97,18 @@ export default function CoverLetterModal({ isOpen, onClose, initialText, onRegen
           <div className="flex items-center gap-3">
             {onRegenerate && (
               <div className="flex items-center gap-2">
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  disabled={isRegenerating}
+                  className="bg-dark-bg border border-border text-text-main text-sm rounded-xl px-3 py-2 focus:ring-2 focus:ring-primary/50 focus:border-primary/50 outline-none appearance-none cursor-pointer hover:border-primary/50 transition-colors disabled:opacity-50"
+                >
+                  <option value="English">English</option>
+                  <option value="Hindi">Hindi</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+                </select>
                 <select
                   value={tone}
                   onChange={(e) => setTone(e.target.value)}

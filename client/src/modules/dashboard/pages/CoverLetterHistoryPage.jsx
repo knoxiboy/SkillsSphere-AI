@@ -47,11 +47,11 @@ const CoverLetterHistoryPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleRegenerate = async (tone) => {
+  const handleRegenerate = async (tone, language) => {
     if (!selectedCl) return null;
     try {
       const resumeId = typeof selectedCl.resume === 'object' ? selectedCl.resume._id : selectedCl.resume;
-      const response = await generateCoverLetter(resumeId, selectedCl.jobDescription, tone);
+      const response = await generateCoverLetter(resumeId, selectedCl.jobDescription, tone, language);
       if (response && response.coverLetter && response.coverLetter.generatedText) {
         // Refresh history to show the newly generated version
         fetchHistory();

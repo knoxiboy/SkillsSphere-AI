@@ -32,7 +32,7 @@ export const analyzeResume = async (file, jobDescription = "") => {
   }
 };
 
-export const generateCoverLetter = async (resumeId, jobDescription, tone = "Professional") => {
+export const generateCoverLetter = async (resumeId, jobDescription, tone = "Professional", language = "English") => {
   try {
     if (!resumeId) throw new Error("Resume ID is missing.");
     if (!jobDescription || !jobDescription.trim()) throw new Error("Job description is required.");
@@ -44,7 +44,8 @@ export const generateCoverLetter = async (resumeId, jobDescription, tone = "Prof
       method: "POST",
       body: { 
         jobDescription: jobDescription.trim(),
-        tone
+        tone,
+        language
       },
       token,
     });

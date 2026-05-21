@@ -104,9 +104,9 @@ const AnalysisResult = ({ result, file, jobDescription, onReset }) => {
     }
   };
 
-  const handleRegenerate = async (tone) => {
+  const handleRegenerate = async (tone, language) => {
     try {
-      const response = await generateCoverLetter(result.resumeId, jobDescription, tone);
+      const response = await generateCoverLetter(result.resumeId, jobDescription, tone, language);
       if (response && response.coverLetter && response.coverLetter.generatedText) {
         setClText(response.coverLetter.generatedText);
         return response.coverLetter.generatedText;

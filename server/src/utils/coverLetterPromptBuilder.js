@@ -2,7 +2,7 @@
  * Utility to dynamically generate AI prompts for Cover Letter generation.
  */
 
-export const buildCoverLetterPrompt = ({ resumeData, analysisData, jobDescription, tone = "Professional" }) => {
+export const buildCoverLetterPrompt = ({ resumeData, analysisData, jobDescription, tone = "Professional", language = "English" }) => {
   const candidateName = resumeData?.personalInfo?.name || "[Your Name]";
   const candidateSkills = analysisData?.skills?.present || resumeData?.skills || [];
   
@@ -49,6 +49,8 @@ export const buildCoverLetterPrompt = ({ resumeData, analysisData, jobDescriptio
   return `You are an expert career coach and professional copywriter specializing in ATS-optimized job applications.
 Your task is to write a highly professional, compelling, and concise cover letter for the candidate based on their resume data and the target job description.
 
+*** CRITICAL INSTRUCTION: The entire cover letter MUST be written in ${language.toUpperCase()}. ***
+
 ### INSTRUCTIONS:
 1. **Writing Tone**: ${selectedToneInstruction}
 2. **Conciseness**: Keep the cover letter under 400 words. Use clear, impactful language.
@@ -59,6 +61,7 @@ Your task is to write a highly professional, compelling, and concise cover lette
 7. **Address**: Address it to "Hiring Team" or "Hiring Manager" if a specific name is not provided in the JD.
 8. **CRITICAL - NO HALLUCINATIONS**: Do not fabricate experiences, company names, metrics, or achievements not present in the resume data. Only use provided resume information. Do not invent a "Previous Company".
 9. **Date**: At the very top of the cover letter, include today's date: ${currentDate}
+10. **Language**: Generate the ENTIRE cover letter exclusively in ${language.toUpperCase()}. Even the greeting and sign-off must be in ${language.toUpperCase()}. Do not output English sentences.
 
 ---
 
@@ -84,6 +87,6 @@ ${jobDescription || "No job description provided. Write a strong general cover l
 ---
 
 ### REQUIRED OUTPUT:
-Generate ONLY the final cover letter text. Do not include any introductory remarks like "Here is your cover letter". Ensure proper spacing between paragraphs.
+Generate ONLY the final cover letter text in ${language.toUpperCase()}. Do not include any introductory remarks like "Here is your cover letter". Ensure proper spacing between paragraphs.
 `;
 };

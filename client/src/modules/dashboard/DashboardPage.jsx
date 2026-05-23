@@ -353,7 +353,7 @@ const DashboardPage = () => {
           )}
 
         {/* Analytics Section */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             {/* Next Roadmap Milestone - Student Only */}
             {isStudent && nextMilestone && (

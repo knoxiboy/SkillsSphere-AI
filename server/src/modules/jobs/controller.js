@@ -16,6 +16,33 @@ import {
 } from "./service.js";
 import AppError from "../../utils/AppError.js";
 import asyncHandler from "../../utils/asyncHandler.js";
+import { invalidateCacheByPrefix } from "../../utils/cacheHelpers.js";
+
+/**
+ * Sanitizes a string to prevent CSV Injection (Formula Injection).
+ * If the string starts with a dangerous character (=, +, -, @, \t, \r),
+ * it prepends a single quote to force the spreadsheet application to treat it as text.
+ * It also escapes double quotes and wraps the result in quotes.
+ * 
+ * @param {string} str - The string to sanitize
+ * @returns {string} The sanitized, quote-wrapped string ready for CSV insertion
+ */
+const sanitizeCSVField = (str) => {
+  if (typeof str !== "string") str = String(str || "");
+  
+  // Clean newlines
+  let cleaned = str.replace(/\r?\n|\r/g, " ");
+
+  // Escape double quotes
+  cleaned = cleaned.replace(/"/g, '""');
+
+  // Prevent formula injection by neutralizing dangerous starting characters
+  if (/^[=+\-@\t\r]/.test(cleaned)) {
+    cleaned = "'" + cleaned;
+  }
+
+  return `"${cleaned}"`;
+};
 
 /**
  * @desc    Create a new job posting
@@ -85,6 +112,9 @@ export const createJobPosting = asyncHandler(async (req, res) => {
     keywords,
     recruiter: req.user._id,
   });
+
+  // Invalidate jobs cache
+  await invalidateCacheByPrefix("jobs");
 
   res.status(201).json({
     success: true,
@@ -253,8 +283,7 @@ export const applyToJobPosting = asyncHandler(async (req, res) => {
  * @access  Private (Recruiters only)
  */
 export const getApplications = asyncHandler(async (req, res) => {
-  const { status } = req.query;
-  const applications = await getJobAppsService(req.params.id, req.user._id, status);
+  const applications = await getJobAppsService(req.params.id, req.user._id, req.query);
 
   res.status(200).json({
     success: true,

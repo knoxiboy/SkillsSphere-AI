@@ -264,7 +264,7 @@ export const findOrCreateGoogleUser = async ({ email, name, picture }) => {
 
 // Exchange a one-time auth code for a JWT
 export const exchangeAuthCodeForToken = async (code) => {
-  const userId = consumeAuthCode(code);
+  const userId = await consumeAuthCode(code);
   if (!userId) return null;
 
   const user = await User.findById(userId);

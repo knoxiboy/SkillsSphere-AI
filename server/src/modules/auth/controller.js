@@ -242,7 +242,7 @@ export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
   }
 
   // Generate a short-lived one-time auth code (never expose JWT in URL)
-  const authCode = generateAuthCode(user._id.toString());
+  const authCode = await generateAuthCode(user._id.toString());
 
   res.redirect(`${callbackUrl}?code=${authCode}`);
 });

@@ -19,7 +19,8 @@ import {
   X,
   Code,
   ChevronDown,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import Navbar from '../../../shared/landing/Navbar';
 import { Button, LoadingState, ErrorState, EmptyState, StatusUpdateModal, StatusTimeline } from '../../../shared/components';
@@ -673,6 +674,24 @@ const RecruiterApplicantsPage = () => {
                                         <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
                                           <span className="text-blue-400 mt-0.5">•</span>
                                           <span className="leading-relaxed">{insight}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                              )}
+
+                              {app.aiWeaknesses && app.aiWeaknesses.length > 0 && (
+                                <div className="space-y-3 pt-6 border-t border-white/5">
+                                  <h4 className="text-sm font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                                    <AlertTriangle size={16} /> AI Weakness Detection
+                                  </h4>
+                                  <div className="p-5 bg-slate-900/50 border border-amber-500/20 rounded-2xl shadow-inner">
+                                    <ul className="space-y-2">
+                                      {app.aiWeaknesses.map((weakness, idx) => (
+                                        <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+                                          <span className="text-amber-400 mt-0.5">•</span>
+                                          <span className="leading-relaxed">{weakness}</span>
                                         </li>
                                       ))}
                                     </ul>

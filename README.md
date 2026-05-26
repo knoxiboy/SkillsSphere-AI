@@ -161,6 +161,28 @@ npm run dev:web
 
 > ⚠️ Backend requires environment variables to run properly. Refer to the Environment Setup section below.
 
+## 🐳 Run with Docker (Recommended)
+
+To avoid manual installation of Python dependencies, Node modules, and OS-level packages (like FFmpeg), you can run the entire stack using Docker.
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+
+### Steps
+1. Clone the repository and navigate to the root directory.
+2. Ensure you have created your `.env` files in both the `server` and `interview-ai-service` directories (refer to `.env.example`).
+3. Run the following command from the root directory:
+   ```bash
+   docker-compose up --build
+   ```
+
+Access the applications:
+- **Client**: [http://localhost:5173](http://localhost:5173)
+- **Server**: [http://localhost:5000](http://localhost:5000)
+- **AI Microservice**: [http://localhost:8000](http://localhost:8000)
+
+To stop the containers, press `Ctrl+C` or run `docker-compose down`.
+
 ## Scalable Folder Structure
 
 The following structure keeps the project modular and easy to scale for new contributors:

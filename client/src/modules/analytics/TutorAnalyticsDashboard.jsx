@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import Navbar from "../../shared/landing/Navbar";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Treemap } from "recharts";
 import { TrendingUp, Users, AlertCircle } from "lucide-react";
 import { useSelector } from "react-redux";
@@ -88,7 +87,7 @@ const TutorAnalyticsDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 px-6 pb-6 pt-24 sm:px-10 sm:pb-10 sm:pt-28">
-      <Navbar />
+      
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header Section */}

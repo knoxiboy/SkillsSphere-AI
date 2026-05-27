@@ -21,7 +21,6 @@ import {
 } from "./services/profileService";
 import LoadingState from "../../shared/components/LoadingState";
 import { getSignedFileUrl } from "../../services/fileService";
-import Navbar from "../../shared/landing/Navbar";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -348,10 +347,9 @@ const ProfilePage = () => {
     <div className="min-h-screen transition-colors duration-300 relative bg-gradient-to-br from-[#f0eeff] via-[#f7f9fc] to-[#edfdf5] dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 pt-24">
       <Navbar />
       <div className="relative" style={{ zIndex: 2 }}>
-        <Navbar />
         
         {/* ── Cover Banner ── */}
-        <div className="relative w-full h-52 sm:h-44 overflow-hidden pt-20">
+        <div className="relative w-full h-52 sm:h-44 overflow-hidden">
           <div className={`absolute inset-0 bg-gradient-to-r ${roleConfig.banner} opacity-90`} />
           <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/10" />
           <div className="absolute bottom-0 left-1/4 w-32 h-32 rounded-full bg-white/5" />

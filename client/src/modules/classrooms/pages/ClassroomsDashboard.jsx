@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import Navbar from "../../../shared/landing/Navbar";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { Video, Users, ArrowRight, MonitorPlay, Calendar, BookOpen, Clock, Power, ShieldAlert } from "lucide-react";

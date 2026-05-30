@@ -13,7 +13,8 @@ import {
   MessageSquare,
   Globe,
   PenTool,
-  Loader2
+  Loader2,
+  BarChart3
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Button from "../../../shared/landing/Button";
@@ -23,6 +24,118 @@ import { generateCoverLetter } from "../services/resumeService";
 import AnalysisReportPDF from "./AnalysisReportPDF";
 import { useToast } from "../../../shared/components";
 import { exportToPDF } from "../../../utils/exportUtils";
+
+const ATS_BREAKDOWN_CONFIG = [
+  { key: "formatting", label: "Formatting", offset: 4 },
+  { key: "keywords", label: "Keywords", offset: -3 },
+  { key: "structure", label: "Structure", offset: 2 },
+  { key: "skillsMatch", label: "Skills Match", offset: 1 },
+  { key: "experienceRelevance", label: "Experience Relevance", offset: -2 },
+  { key: "education", label: "Education", offset: 0 },
+  { key: "contactInformation", label: "Contact Information", offset: 3 },
+];
+
+const clampScore = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.max(0, Math.min(100, Math.round(number)));
+};
+
+const firstScore = (...values) => {
+  for (const value of values) {
+    const score = clampScore(value);
+    if (score !== null) return score;
+  }
+  return null;
+};
+
+const booleanGroupScore = (values) => {
+  const checks = values.filter((value) => typeof value === "boolean");
+  if (checks.length === 0) return null;
+  const passed = checks.filter(Boolean).length;
+  return Math.round((passed / checks.length) * 100);
+};
+
+const fallbackCategoryScore = (overallScore, offset) => {
+  const baseScore = clampScore(overallScore) ?? 0;
+  return Math.max(0, Math.min(100, baseScore + offset));
+};
+
+const getBreakdownFeedback = (label, score) => {
+  if (score >= 85) return `${label} is strong and ATS-friendly.`;
+  if (score >= 70) return `${label} is solid with minor room to improve.`;
+  if (score >= 50) return `${label} needs clearer signals for ATS parsing.`;
+  return `${label} should be improved to raise your ATS readiness.`;
+};
+
+const buildAtsScoreBreakdown = (result, overallScore) => {
+  const atsDetails = result?.atsOptimization?.details || {};
+  const sectionResults = atsDetails.sectionResults || {};
+  const contactResults = atsDetails.contactResults || {};
+
+  const availableScores = {
+    formatting: firstScore(
+      result?.atsOptimization?.formattingScore,
+      atsDetails.formattingScore,
+      result?.formatting?.score,
+      result?.readabilityMatch?.score
+    ),
+    keywords: firstScore(
+      result?.keywordMatch?.score,
+      result?.techStandard?.score,
+      result?.atsOptimization?.keywordScore,
+      atsDetails.keywordScore
+    ),
+    structure: firstScore(
+      result?.atsOptimization?.structureScore,
+      atsDetails.structureScore,
+      booleanGroupScore([
+        sectionResults.experience,
+        sectionResults.education,
+        sectionResults.skills,
+        sectionResults.summary,
+      ])
+    ),
+    skillsMatch: firstScore(
+      result?.skillMatch?.score,
+      result?.skillsMatch?.score,
+      result?.gapAnalysis?.score
+    ),
+    experienceRelevance: firstScore(
+      result?.experienceMatch?.score,
+      result?.experienceRelevance?.score,
+      result?.impactMatch?.score,
+      sectionResults.experience === true ? 85 : sectionResults.experience === false ? 45 : null
+    ),
+    education: firstScore(
+      result?.educationMatch?.score,
+      result?.education?.score,
+      sectionResults.education === true ? 90 : sectionResults.education === false ? 40 : null
+    ),
+    contactInformation: firstScore(
+      result?.contactInformation?.score,
+      atsDetails.contactScore,
+      booleanGroupScore([
+        contactResults.email,
+        contactResults.phone,
+        contactResults.linkedin,
+        contactResults.github,
+        contactResults.portfolio,
+      ])
+    ),
+  };
+
+  return ATS_BREAKDOWN_CONFIG.map((category) => {
+    const score = availableScores[category.key] ?? fallbackCategoryScore(overallScore, category.offset);
+
+    return {
+      ...category,
+      score,
+      feedback: getBreakdownFeedback(category.label, score),
+    };
+  });
+};
+
 const AnalysisResult = ({ result, file, jobDescription, onReset }) => {
   const score = result?.score || 0;
   const isJDProvided = result.isJDProvided;
@@ -58,6 +171,12 @@ const AnalysisResult = ({ result, file, jobDescription, onReset }) => {
     return "text-red-400";
   };
 
+  const getProgressColor = (s) => {
+    if (s >= 80) return "bg-secondary";
+    if (s >= 50) return "bg-yellow-400";
+    return "bg-red-400";
+  };
+
   // --- ATS Checklist Logic ---
   const atsData = result.atsOptimization || {};
   const checklist = [
@@ -83,6 +202,7 @@ const AnalysisResult = ({ result, file, jobDescription, onReset }) => {
 
   // --- Action Words ---
   const actionWords = result.readabilityMatch?.relevantVerbs || ["Spearheaded", "Orchestrated", "Transformed", "Optimized", "Architected", "Launched", "Pioneered", "Revitalized"];
+  const atsScoreBreakdown = buildAtsScoreBreakdown(result, score);
 
   const handleExportPDF = async () => {
     if (isExportingPDF) return;
@@ -316,6 +436,53 @@ const AnalysisResult = ({ result, file, jobDescription, onReset }) => {
           )}
         </div>
       </div>
+
+      {/* ATS Score Breakdown */}
+      <section className="bg-white dark:bg-surface border border-gray-200 dark:border-border rounded-[2rem] p-6 sm:p-8 shadow-xl">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <BarChart3 className="w-5 h-5 text-primary" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-text-main">ATS Score Breakdown</h3>
+          </div>
+          <span className={`text-2xl font-black ${getScoreColor(score)}`}>{score}%</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {atsScoreBreakdown.map((category) => (
+            <div
+              key={category.key}
+              className="rounded-2xl border border-gray-200 dark:border-border bg-gray-50/80 dark:bg-dark-bg/40 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <h4 className="text-sm font-bold text-gray-900 dark:text-text-main">
+                  {category.label}
+                </h4>
+                <span className={`text-sm font-black ${getScoreColor(category.score)}`}>
+                  {category.score}%
+                </span>
+              </div>
+              <div
+                className="h-2.5 bg-gray-200 dark:bg-dark-bg rounded-full overflow-hidden"
+                role="progressbar"
+                aria-label={`${category.label} ATS score`}
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={category.score}
+              >
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${getProgressColor(category.score)}`}
+                  style={{ width: `${category.score}%` }}
+                />
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-gray-500 dark:text-text-muted">
+                {category.feedback}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Visual Skill Gap Venn Diagram */}
       <SkillGapVenn 

@@ -14,6 +14,8 @@ vi.mock("../services/profileService", () => ({
   deleteProfile: vi.fn(),
   uploadAvatar: vi.fn(),
   removeAvatar: vi.fn(),
+  getUserPreferences: vi.fn(async () => ({})),
+  updateUserPreferences: vi.fn(async () => ({})),
 }));
 
 vi.mock("../../../services/fileService", () => ({
@@ -58,7 +60,6 @@ const renderProfile = (user = baseUser) =>
     <Provider store={createStore(user)}>
       <MemoryRouter>
         <ThemeProvider>
-          <ProfilePage />
           <ToastProvider>
             <ProfilePage />
           </ToastProvider>

@@ -23,6 +23,8 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import Navbar from '../../../shared/landing/Navbar';
+import Footer from "../../../modules/landing/components/Footer";
+
 import { Button, LoadingState, ErrorState, EmptyState, StatusUpdateModal, StatusTimeline } from '../../../shared/components';
 import { getJobApplications, updateApplicationStatus, getJobPostingById, exportJobApplicationsCSV } from '../services/jobPostingService';
 import { exportToCSV, exportToPDF } from '../../../utils/exportUtils';
@@ -903,6 +905,7 @@ const RecruiterApplicantsPage = () => {
         currentStatus={selectedApp?.status}
         onUpdate={handleUpdateStatus}
       />
+          <Footer />
     </main>
   );
 };

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { CheckCircle2, Circle, Clock, Rocket, Target, Award, Star, MessageSquare } from "lucide-react";
 import Navbar from "../../../shared/landing/Navbar";
+import Footer from "../../../modules/landing/components/Footer";
+
 import { getMyRoadmap, updateTopicStatus } from "../services/roadmapService";
 import { LoadingState, useToast } from "../../../shared/components";
 import ContributionSummaryCard from "../components/ContributionSummaryCard";
@@ -78,7 +80,7 @@ const RoadmapPage = () => {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-main)] font-sans pt-24">
       <Navbar />
-      <div className="max-w-4xl mx-auto pt-32 pb-20 px-4">
+      <div className="max-w-4xl mx-auto pt-8 pb-20 px-4">
         {/* Header section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16 animate-slide-up">
           <div>
@@ -257,6 +259,7 @@ const RoadmapPage = () => {
           currentUser={user}
         />
       )}
+          <Footer />
     </div>
   );
 };

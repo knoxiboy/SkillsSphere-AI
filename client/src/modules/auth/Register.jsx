@@ -300,7 +300,7 @@ const Register = () => {
               {errors.form}
             </p>
           )}
-          <GoogleOAuthButton role={formData.role} />
+          <GoogleOAuthButton role={form.role} />
         </form>
         {/* Footer */}
         <p className="text-center mt-4 sm:mt-5 text-slate-600 dark:text-slate-400 text-xs sm:text-sm">

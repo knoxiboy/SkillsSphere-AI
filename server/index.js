@@ -49,6 +49,7 @@ import roadmapRoutes from "./src/modules/roadmap/routes.js";
 import { initRoadmapSockets } from "./src/modules/roadmap/socket.js";
 import userRoutes from "./src/modules/users/routes.js";
 import { setIO } from "./src/utils/socketIO.js";
+import attachSocketRateLimiter from "./src/middleware/socketRateLimiter.js";
 
 const app = express();
 if (process.env.TRUST_PROXY === "true") {
@@ -109,6 +110,8 @@ io.use(async (socket, next) => {
 });
 
 setIO(io);
+// Attach per-socket rate limiter to protect against message floods
+attachSocketRateLimiter(io);
 
 app.use(compression());
 app.use(

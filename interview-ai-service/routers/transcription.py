@@ -40,7 +40,7 @@ async def transcribe(audio: UploadFile = File(...)):
             tmp.write(content)
             tmp_path = tmp.name
 
-        transcript = transcribe_audio(tmp_path)
+        transcript = await asyncio.to_thread(transcribe_audio, tmp_path)
 
         return {"transcript": transcript}
 
@@ -86,7 +86,7 @@ async def websocket_transcribe(websocket: WebSocket):
                         tmp_path = tmp.name
                     
                     try:
-                        transcript = transcribe_audio(tmp_path)
+                        transcript = await asyncio.to_thread(transcribe_audio, tmp_path)
                         await websocket.send_json({"transcript": transcript})
                     except Exception as e:
                         await websocket.send_json({"error": str(e)})

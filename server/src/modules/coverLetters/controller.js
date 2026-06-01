@@ -24,17 +24,14 @@ export const getCoverLetters = asyncHandler(async (req, res, next) => {
     CoverLetter.countDocuments({ user: userId }),
   ]);
 
-  res.status(200).json({
-    success: true,
-    count: coverLetters.length,
-    data: coverLetters,
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    },
-  });
+res.status(200).json({
+  success: true,
+  count: coverLetters.length,
+  totalCount: total,
+  totalPages: Math.ceil(total / limit),
+  currentPage: page,
+  data: coverLetters,
+});
 });
 
 /**

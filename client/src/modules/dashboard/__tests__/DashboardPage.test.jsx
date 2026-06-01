@@ -10,7 +10,7 @@ import {
   getSkillTrends,
 } from "../services/dashboardService";
 import { getRecruiterJobs } from "../../recruiter-jobs/services/jobPostingService";
-import Footer from "../../../modules/landing/components/Footer";
+import Footer from "../../../shared/components/Footer";
 
 
 vi.mock("../services/dashboardService", () => ({

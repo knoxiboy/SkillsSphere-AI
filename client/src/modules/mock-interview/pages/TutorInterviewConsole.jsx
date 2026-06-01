@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import { PlayCircle, PauseCircle, Save, ArrowLeft, MessageSquare, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest } from "../../../services/apiClient.js";
 import Navbar from "../../../shared/components/Navbar";
-import Footer from "../../../modules/landing/components/Footer";
+import Footer from "../../../shared/components/Footer";
 
 import Input from "../../../shared/components/Input";
 import TextArea from "../../../shared/components/TextArea";

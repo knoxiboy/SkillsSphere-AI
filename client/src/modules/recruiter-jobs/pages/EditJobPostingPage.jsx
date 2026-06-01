@@ -3,7 +3,7 @@ import { useSelector } from "react-redux";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft, Edit3 } from "lucide-react";
 import Navbar from "../../../shared/components/Navbar";
-import Footer from "../../../modules/landing/components/Footer";
+import Footer from "../../../shared/components/Footer";
 
 import JobPostingForm from "../components/JobPostingForm";
 import LoadingState from "../../../shared/components/LoadingState";

@@ -43,7 +43,7 @@ import {
   Radar
 } from "recharts";
 import Navbar from "../../../shared/components/Navbar";
-import Footer from "../../../modules/landing/components/Footer";
+import Footer from "../../../shared/components/Footer";
 
 import LoadingState from "../../../shared/components/LoadingState";
 import ErrorState from "../../../shared/components/ErrorState";

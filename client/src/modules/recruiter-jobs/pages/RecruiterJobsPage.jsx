@@ -3,7 +3,7 @@ import { useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Briefcase, Search, ArrowLeft } from "lucide-react";
 import Navbar from "../../../shared/components/Navbar";
-import Footer from "../../../modules/landing/components/Footer";
+import Footer from "../../../shared/components/Footer";
 
 import Button from "../../../shared/components/Button";
 import Input from "../../../shared/components/Input";

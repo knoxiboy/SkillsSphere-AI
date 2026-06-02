@@ -157,7 +157,6 @@ const TalentFinderPage = () => {
           setSelectedJobId(openJobs[0]._id);
         }
       } catch (err) {
-        console.error("[Workspace Exception] Error retrieving job listings registry:", err);
         logger.error("Failed to load recruiter jobs:", err);
       } finally {
         setJobsLoading(false);

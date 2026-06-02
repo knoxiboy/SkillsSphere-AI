@@ -25,7 +25,14 @@ import {
   AlertCircle,
   Target,
   MessageSquare,
-  Brain
+  Brain,
+  Activity,
+  Clock,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  MicOff,
+  Info
 } from "lucide-react";
 
 const InterviewSession = () => {

@@ -54,7 +54,6 @@ export const CreateSessionForm = ({
             Max Participants ({maxParticipants})
           </label>
           <input
-            type="type" // keep standard range
             type="range"
             min="2"
             max="100"

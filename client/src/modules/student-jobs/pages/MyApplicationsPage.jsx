@@ -47,7 +47,7 @@ const statusConfig = {
 const BOARD_COLUMNS = ["pending", "reviewed", "shortlisted", "rejected", "withdrawn"];
 
 const MyApplicationsPage = () => {
-  useDocumentTitle("My Applications");
+  useDocumentTitle("My Application");
   const { token } = useSelector((state) => state.auth);
   const navigate = useNavigate();
   const toast = useToast();
@@ -391,7 +391,7 @@ const MyApplicationsPage = () => {
             </div>
 
             <h1 className="text-5xl md:text-6xl font-black mb-6 tracking-tight leading-tight">
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-400">My</span> Applications
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-400">My</span> Application
             </h1>
             <p className="text-lg text-gray-600 dark:text-slate-400 font-medium">
               Track and manage all the jobs you&apos;ve applied to
@@ -456,10 +456,10 @@ const MyApplicationsPage = () => {
 
             {/* Right Content */}
             <div className="flex-1 text-center md:text-left z-10">
-              <h2 className="text-3xl font-heading font-black text-text-main mb-4">
-                No Applications Yet
+              <h2 className="text-3xl font-heading font-black text-gray-900 dark:text-white mb-4">
+                No Application Yet
               </h2>
-              <p className="text-text-muted text-lg mb-8 leading-relaxed max-w-lg">
+              <p className="text-gray-500 dark:text-slate-400 text-lg mb-8 leading-relaxed max-w-lg">
                 You haven&apos;t applied to any jobs yet. Start exploring opportunities and track your applications in one place.
               </p>
               
@@ -473,15 +473,15 @@ const MyApplicationsPage = () => {
 
               {/* Bottom Tags */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-10">
-                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-hover rounded-full text-sm font-medium text-text-main border border-border">
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-slate-800 rounded-full text-sm font-medium text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
                   <Sparkles size={16} className="text-purple-500" />
                   AI Matching
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-hover rounded-full text-sm font-medium text-text-main border border-border">
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-slate-800 rounded-full text-sm font-medium text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
                   <ClipboardList size={16} className="text-emerald-500" />
                   Application Tracking
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-hover rounded-full text-sm font-medium text-text-main border border-border">
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-slate-800 rounded-full text-sm font-medium text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
                   <BarChart2 size={16} className="text-indigo-500" />
                   Smart Insights
                 </div>

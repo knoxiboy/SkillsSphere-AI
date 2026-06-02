@@ -14,6 +14,12 @@ import {
   XCircle,
   LayoutGrid,
   List,
+  Target,
+  Sparkles,
+  Star,
+  Search,
+  ClipboardList,
+  BarChart2,
 } from "lucide-react";
 import Navbar from "../../../shared/components/Navbar";
 import Footer from "../../../shared/components/Footer";
@@ -355,6 +361,14 @@ const MyApplicationsPage = () => {
 
 
       <div className="container mx-auto px-4 pb-12 flex-1 relative">
+        {/* Floating Icons Background */}
+        <div className="absolute top-24 left-[10%] hidden lg:flex items-center justify-center w-16 h-16 bg-white dark:bg-surface rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-white/5 opacity-80 pointer-events-none z-0 hover:opacity-100 transition-opacity">
+          <Briefcase size={28} className="text-purple-500" />
+        </div>
+        <div className="absolute top-36 right-[10%] hidden lg:flex items-center justify-center w-16 h-16 bg-white dark:bg-surface rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-white/5 opacity-80 pointer-events-none z-0 hover:opacity-100 transition-opacity">
+          <Target size={28} className="text-green-500" />
+        </div>
+
         <div className={`w-full mx-auto relative z-10 ${viewMode === 'list' ? 'max-w-[1200px]' : 'max-w-[1400px]'}`}>
           
           {/* Back to Dashboard Link */}
@@ -427,22 +441,52 @@ const MyApplicationsPage = () => {
             </button>
           </div>
         ) : applications.length === 0 && currentPage === 1 ? (
-          <div className="text-center p-12 bg-white dark:bg-slate-900/50 rounded-2xl border border-gray-200 dark:border-white/5">
-            <div className="inline-flex p-4 bg-gray-100 dark:bg-slate-700/30 rounded-2xl mb-6">
-              <Briefcase size={48} className="text-gray-400 dark:text-slate-500" />
+          <div className="max-w-4xl mx-auto p-8 md:p-12 bg-white dark:bg-surface rounded-[2rem] border border-border shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] dark:shadow-none flex flex-col md:flex-row items-center gap-12 relative overflow-hidden mt-8">
+            
+            {/* Left Graphic */}
+            <div className="relative w-64 h-64 flex-shrink-0 flex items-center justify-center">
+              <div className="absolute inset-0 bg-blue-50 dark:bg-blue-900/20 rounded-full blur-3xl opacity-50"></div>
+              <div className="absolute inset-4 bg-gradient-to-tr from-purple-100 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 rounded-full flex items-center justify-center border border-white/50 dark:border-white/5">
+                <Briefcase size={80} className="text-purple-500 drop-shadow-xl" />
+              </div>
+              {/* Decorative elements */}
+              <div className="absolute top-8 right-8 text-blue-500 animate-pulse"><Sparkles size={24} /></div>
+              <div className="absolute bottom-12 left-8 text-purple-400 animate-bounce"><Star size={16} /></div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-              No Applications Yet
-            </h2>
-            <p className="text-gray-500 dark:text-slate-400 mb-8">
-              You haven&apos;t applied to any jobs yet. Head to the Job Board to find opportunities!
-            </p>
-            <button
-              onClick={() => navigate("/jobs")}
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors"
-            >
-              Browse Job Board
-            </button>
+
+            {/* Right Content */}
+            <div className="flex-1 text-center md:text-left z-10">
+              <h2 className="text-3xl font-heading font-black text-text-main mb-4">
+                No Applications Yet
+              </h2>
+              <p className="text-text-muted text-lg mb-8 leading-relaxed max-w-lg">
+                You haven&apos;t applied to any jobs yet. Start exploring opportunities and track your applications in one place.
+              </p>
+              
+              <button
+                onClick={() => navigate("/jobs")}
+                className="inline-flex items-center gap-2 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-[0_8px_20px_rgb(37,99,235,0.3)] hover:shadow-[0_12px_25px_rgb(37,99,235,0.4)] hover:-translate-y-0.5"
+              >
+                <Search size={18} />
+                Explore Job Opportunities
+              </button>
+
+              {/* Bottom Tags */}
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-10">
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-hover rounded-full text-sm font-medium text-text-main border border-border">
+                  <Sparkles size={16} className="text-purple-500" />
+                  AI Matching
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-hover rounded-full text-sm font-medium text-text-main border border-border">
+                  <ClipboardList size={16} className="text-emerald-500" />
+                  Application Tracking
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-hover rounded-full text-sm font-medium text-text-main border border-border">
+                  <BarChart2 size={16} className="text-indigo-500" />
+                  Smart Insights
+                </div>
+              </div>
+            </div>
           </div>
         ) : viewMode === "list" ? (
           /* List View */

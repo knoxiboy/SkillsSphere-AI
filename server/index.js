@@ -32,6 +32,7 @@ import {
 } from "./src/middleware/socketAuthError.js";
 import analyticsRoutes from "./src/modules/analytics/routes.js";
 import authRoutes from "./src/modules/auth/routes.js";
+import createChatRouter from "./src/modules/chat/routes.js";
 import classroomRoutes from "./src/modules/classrooms/routes.js";
 import { initClassroomSockets } from "./src/modules/classrooms/socket.js";
 import coverLetterRoutes from "./src/modules/coverLetters/routes.js";
@@ -150,33 +151,7 @@ app.get("/health", (req, res) => {
 
 // app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.post("/api/chat", async (req, res) => {
-  try {
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "Message required" });
-    }
-
-    if (!geminiModel) {
-      return res.status(503).json({
-        error:
-          "AI service is currently unconfigured. Please set GEMINI_API_KEY in .env",
-      });
-    }
-
-    const prompt = `You are the "SkillsSphere Career Assistant", an expert AI specializing in tech careers, resumes, recruitment, and technical interviews. 
-Keep your answers concise, helpful, and professional. If the user asks something completely unrelated to careers or the platform, politely decline to answer.
-User message: ${message}`;
-
-    const result = await geminiModel.generateContent(prompt);
-    const reply = result.response.text();
-
-    res.json({ reply });
-  } catch (error) {
-    logger.error("Chat API error:", error);
-    res.status(500).json({ error: "Failed to generate AI response" });
-  }
-});
+app.use("/api/chat", createChatRouter({ getGeminiModel: () => geminiModel }));
 
 app.use("/api/auth", requireDB, authRoutes);
 app.use("/api/resume", requireDB, resumeRoutes);

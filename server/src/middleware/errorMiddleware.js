@@ -146,12 +146,21 @@ const globalErrorHandler = (err, req, res, next) => {
   }
 
   
-  // Preserve field-level errors from Mongoose if present
-  if (err.errors && !error.errors) {
-    error.errors = {};
-    Object.keys(err.errors).forEach((key) => {
-      error.errors[key] = err.errors[key].message;
-    });
+  // Preserve field-level errors from Mongoose if present (deterministic)
+  // Prefer any field-level errors already attached to `error`, but fall back
+  // to the original mongoose `err.errors` when missing or empty.
+  if (err?.errors) {
+    const hasExistingErrors =
+      error?.errors &&
+      typeof error.errors === "object" &&
+      Object.keys(error.errors).length > 0;
+
+    if (!hasExistingErrors) {
+      error.errors = {};
+      Object.keys(err.errors).forEach((key) => {
+        error.errors[key] = err.errors[key].message;
+      });
+    }
   }
 
   error.statusCode = error.statusCode || 500;

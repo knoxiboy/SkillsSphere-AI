@@ -167,6 +167,11 @@ router.post(
  *             required:
  *               - question
  *               - answerText
+ *             properties:
+ *               question:
+ *                 type: string
+ *               answerText:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Evaluation output resolved cleanly (or fallback injected)
@@ -228,12 +233,18 @@ router.post(
 
 /**
  * @openapi
- * /api/interviews/:id/complete:
+ * /api/interviews/{id}/complete:
  *   post:
  *     summary: Terminate an open interview window frame and calculate structural statistics
  *     tags: [Mock Interviews]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Aggregate records locked down and calculated

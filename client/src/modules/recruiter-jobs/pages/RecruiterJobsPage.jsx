@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Briefcase, Search } from "lucide-react";
 import Navbar from "../../../shared/landing/Navbar";
 import Button from "../../../shared/components/Button";
@@ -12,6 +12,7 @@ import JobCardSkeleton from "../../student-jobs/components/JobCardSkeleton";
 import { Pagination, JobViewerCard } from "../../../shared/components";
 import JobPostingCard from "../components/JobPostingCard";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle";
+import RecruiterInsightsPage from "./RecruiterInsightsPage";
 import {
   getRecruiterJobs,
   deleteJobPosting,
@@ -28,6 +29,7 @@ const STATUS_FILTERS = [
 const RecruiterJobsPage = () => {
   useDocumentTitle("Recruiter Jobs");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { token } = useSelector((state) => state.auth);
   const toast = useToast();
   const [jobs, setJobs] = useState([]);
@@ -38,6 +40,7 @@ const RecruiterJobsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const insightsJobId = searchParams.get("insights");
 
   const fetchJobs = async (page = 1) => {
     setLoading(true);
@@ -154,8 +157,7 @@ const RecruiterJobsPage = () => {
   };
 
   const handleViewRecommendations = (job) => {
-    // navigate(`/recruiter/jobs/${job.id}/recommendations`);
-    console.log("View recommendations", job);
+    navigate(`/recruiter/jobs?insights=${job._id || job.id}`);
   };
 
   const handleViewApplicants = (job) => {
@@ -163,6 +165,9 @@ const RecruiterJobsPage = () => {
   };
 
   return (
+    insightsJobId ? (
+      <RecruiterInsightsPage jobId={insightsJobId} />
+    ) : (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#0f172a,#020617)] p-3 sm:p-5 pt-20 sm:pt-28 text-slate-100">
       <Navbar />
 
@@ -283,6 +288,7 @@ const RecruiterJobsPage = () => {
         )}
       </div>
     </main>
+    )
   );
 };
 

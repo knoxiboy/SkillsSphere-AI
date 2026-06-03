@@ -75,7 +75,7 @@ export default function ClassroomsDashboard() {
           </div>
         )}
 
-        <div className="grid lg:grid-cols-5 gap-8 items-start">
+        <div className="grid lg:grid-cols-5 gap-8 items-stretch">
           
           {/* Form Side - Span 2 */}
           <div className="lg:col-span-2 space-y-6">

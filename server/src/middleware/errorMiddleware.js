@@ -16,15 +16,30 @@ const handleDuplicateFieldsDB = (err) => {
 };
 
 const handleValidationErrorDB = (err) => {
-  // Build field-level errors object for frontend consumption
+  // Build field-level errors object for frontend consumption.
+  // Hardened: Mongoose ValidationError should have `err.errors`,
+  // but some callers/mocked errors may pass it as undefined or non-object.
+  const rawErrors = err?.errors;
+
+  if (!rawErrors || typeof rawErrors !== "object") {
+    const message = "Invalid input data.";
+    const error = new AppError(message, 400);
+    error.errors = {};
+    return error;
+  }
+
   const errors = {};
-  Object.keys(err.errors).forEach((key) => {
-    errors[key] = err.errors[key].message;
+  Object.keys(rawErrors).forEach((key) => {
+    const fieldErr = rawErrors[key];
+    errors[key] = fieldErr?.message || "Invalid value";
   });
-  
-  const messages = Object.values(err.errors).map((el) => el.message);
-  const message = `Invalid input data. ${messages.join(". ")}`;
-  
+
+  const messages = Object.values(rawErrors)
+    .map((el) => el?.message)
+    .filter((m) => typeof m === "string" && m.trim().length > 0);
+
+  const message = `Invalid input data. ${messages.join(". ")}`.trim();
+
   const error = new AppError(message, 400);
   error.errors = errors; // Attach field-level errors
   return error;

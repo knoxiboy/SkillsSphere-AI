@@ -97,7 +97,7 @@ const InterviewLobby = () => {
         </div>
 
           {/* Back to Dashboard Link */}
-          <div className="py-6 mt-[-1rem]">
+          <div className="py-6">
             <Link 
               to="/dashboard" 
               className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
@@ -113,7 +113,7 @@ const InterviewLobby = () => {
             <Sparkles size={16} /> Cognitive Evaluation Engine
           </div>
           <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-6 drop-shadow-sm leading-tight">
-            <span className="text-blue-600 dark:text-blue-500">Mock</span> Interview
+            <span className="bg-gradient-to-r from-blue-600 via-purple-500 to-teal-400 bg-clip-text text-transparent">Mock</span> Interview
           </h1>
           <p className="text-text-muted max-w-2xl mx-auto text-lg leading-relaxed font-medium">
             Configure your simulator. The AI interviewer dynamically adapts its questions based on your real-time performance and chosen persona.

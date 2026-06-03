@@ -101,13 +101,16 @@ const TutorAnalyticsDashboard = () => {
         
         {/* Header Section */}
         <div>
-          <Link 
-            to="/dashboard" 
-            className="inline-flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-500 mb-4 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Back to Dashboard
-          </Link>
+          {/* Back to Dashboard Link */}
+          <div className="py-6">
+            <Link 
+              to="/dashboard" 
+              className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+            >
+              <ArrowLeft size={16} />
+              Back to Dashboard
+            </Link>
+          </div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Tutor Analytics Dashboard</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2">Class-wide skill gaps and candidate proficiencies.</p>
         </div>

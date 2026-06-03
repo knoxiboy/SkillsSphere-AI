@@ -176,7 +176,7 @@ const Login = () => {
                   sessionStorage.setItem('oauth_redirect', location.state.from.pathname);
                 }
                 const redirect = encodeURIComponent(`${window.location.origin}/auth/callback`);
-                window.location.href = `${API_URL}/api/auth/google?redirect=${redirect}`;
+                window.location.href = `${API_URL}/api/auth/google?redirect=${redirect}&action=login`;
               }}
               className="w-full flex items-center justify-center gap-3 px-4 py-2.5 
                           bg-white hover:bg-slate-50 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 rounded-xl

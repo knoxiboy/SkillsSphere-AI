@@ -228,6 +228,7 @@ export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
   const fallbackCallbackUrl = `${frontendRedirectOrigin}${DEFAULT_OAUTH_REDIRECT_PATH}`;
   let callbackUrl = fallbackCallbackUrl;
   let requestedRole = "student";
+  let requestedAction = "signup"; // Default to signup
 
   if (typeof state === "string" && state.length > 0) {
     try {
@@ -245,6 +246,10 @@ export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
 
       if (stateObj.role) {
         requestedRole = stateObj.role;
+      }
+      
+      if (stateObj.action) {
+        requestedAction = stateObj.action;
       }
 
       const redirectPath = normalizeOAuthRedirectPath(stateObj.redirect);
@@ -297,7 +302,11 @@ export const googleOAuthCallback = asyncHandler(async (req, res, next) => {
 
   let user;
   try {
-    user = await findOrCreateGoogleUser({ ...googleUser, role: requestedRole });
+    user = await findOrCreateGoogleUser({ 
+      ...googleUser, 
+      role: requestedRole,
+      action: requestedAction 
+    });
   } catch (error) {
     const message =
       error instanceof AppError

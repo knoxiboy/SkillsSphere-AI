@@ -260,7 +260,7 @@ export const loginUser = async (email, password) => {
   };
 };
 
-export const findOrCreateGoogleUser = async ({ email, name, picture, role = "student" }) => {
+export const findOrCreateGoogleUser = async ({ email, name, picture, role = "student", action = "signup" }) => {
   const existing = await User.findOne({ email });
 
   if (existing) {
@@ -268,6 +268,10 @@ export const findOrCreateGoogleUser = async ({ email, name, picture, role = "stu
       throw new AppError(LOCAL_EMAIL_REGISTERED_MESSAGE, 409);
     }
     return existing;
+  }
+
+  if (action === "login") {
+    throw new AppError("No account found with this Google email. Please sign up first.", 404);
   }
 
   return User.create({

@@ -60,6 +60,9 @@ router.get("/google", (req, res) => {
   if (role) {
     stateObj.role = role;
   }
+  if (req.query.action) {
+    stateObj.action = req.query.action;
+  }
 
   const state = encodeURIComponent(
     Buffer.from(JSON.stringify(stateObj), "utf8").toString("base64"),

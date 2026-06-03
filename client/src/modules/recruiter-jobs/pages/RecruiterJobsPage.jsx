@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Briefcase, Search, ArrowLeft } from "lucide-react";
 import Navbar from "../../../shared/components/Navbar";
 import Footer from "../../../shared/components/Footer";
@@ -14,6 +14,7 @@ import JobCardSkeleton from "../../student-jobs/components/JobCardSkeleton";
 import { Pagination, JobViewerCard } from "../../../shared/components";
 import JobPostingCard from "../components/JobPostingCard";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle";
+import RecruiterInsightsPage from "./RecruiterInsightsPage";
 import {
   getRecruiterJobs,
   deleteJobPosting,
@@ -32,6 +33,7 @@ const STATUS_FILTERS = [
 const RecruiterJobsPage = () => {
   useDocumentTitle("Recruiter Jobs");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { token } = useSelector((state) => state.auth);
   const toast = useToast();
   const [jobs, setJobs] = useState([]);
@@ -42,6 +44,7 @@ const RecruiterJobsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const insightsJobId = searchParams.get("insights");
 
   const fetchJobs = async (page = 1) => {
     setLoading(true);
@@ -159,7 +162,7 @@ const RecruiterJobsPage = () => {
 
   const handleViewRecommendations = (job) => {
     // navigate(`/recruiter/jobs/${job.id}/recommendations`);
-    logger.log("View recommendations", job);
+    navigate(`?insights=${job._id || job.id}`);
   };
 
   const handleViewApplicants = (job) => {
@@ -167,7 +170,11 @@ const RecruiterJobsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-white flex flex-col">
+    <>
+      {insightsJobId ? (
+        <RecruiterInsightsPage jobId={insightsJobId} />
+      ) : (
+        <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-white flex flex-col">
       <Navbar />
 
       <div className="flex-1 w-full mx-auto max-w-5xl flex flex-col gap-6 pt-24 pb-16 px-4 sm:px-6">
@@ -295,6 +302,8 @@ const RecruiterJobsPage = () => {
       </div>
           <Footer />
     </div>
+      )}
+    </>
   );
 };
 

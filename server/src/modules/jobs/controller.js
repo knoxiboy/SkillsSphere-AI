@@ -2,6 +2,7 @@ import JobPosting from "../../database/models/JobPosting.js";
 import {
   getAllJobs,
   getJobRecommendations,
+  getRankedCandidatesForJob,
   getRecruiterAnalytics as getAnalyticsData,
   applyToJob as applyToJobService,
   getJobApplications as getJobAppsService,
@@ -296,6 +297,10 @@ export const applyToJobPosting = asyncHandler(async (req, res) => {
  * @access  Private (Recruiters only)
  */
 export const getApplications = asyncHandler(async (req, res) => {
+  if (req.query.view === "insights") {
+    return getRankedCandidates(req, res);
+  }
+
   const result = await getJobAppsService(req.params.id, req.user._id, {
     ...req.query,
     page: Math.max(1, parseInt(req.query.page) || 1),
@@ -309,6 +314,20 @@ export const getApplications = asyncHandler(async (req, res) => {
     totalPages: result.totalPages,
     currentPage: result.currentPage,
     applications: result.applications,
+  });
+});
+
+export const getRankedCandidates = asyncHandler(async (req, res) => {
+  const result = await getRankedCandidatesForJob(req.params.id, req.user._id, req.query);
+
+  return res.status(200).json({
+    success: true,
+    job: result.job,
+    candidates: result.candidates,
+    totalCount: result.totalCount,
+    totalPages: result.totalPages,
+    currentPage: result.currentPage,
+    summary: result.summary,
   });
 });
 

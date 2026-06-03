@@ -7,6 +7,12 @@ import { useToast } from "../../shared/components";
 import { setOAuthData, logoutUser } from "../../features/auth/authSlice";
 import Navbar from "../../shared/components/Navbar";
 import Button from "../../shared/components/Button";
+import Input from "../../shared/components/Input";
+import { z } from "zod";
+
+const onboardingSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+});
 
 const ROLES = [
   {
@@ -44,6 +50,7 @@ const OnboardingPage = () => {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [formError, setFormError] = useState("");
 
   // If they somehow land here and are already onboarded, send them to dashboard
   useEffect(() => {
@@ -102,8 +109,11 @@ const OnboardingPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (name.trim().length < 2) {
-      error("Please enter a valid name");
+    setFormError("");
+    
+    const parsed = onboardingSchema.safeParse({ name });
+    if (!parsed.success) {
+      setFormError(parsed.error.issues[0].message);
       return;
     }
 
@@ -204,31 +214,26 @@ const OnboardingPage = () => {
             </div>
 
             <div className="flex-1 space-y-4 w-full">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-sm sm:text-base"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
+              <Input
+                id="name"
+                label="Full Name"
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setFormError("");
+                }}
+                error={formError}
+                disabled={isSubmitting || isUploadingPhoto}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={user?.email || ""}
-                  disabled
-                  className="w-full bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-500 cursor-not-allowed text-sm sm:text-base"
-                />
-              </div>
+              <Input
+                id="email"
+                type="email"
+                label="Email Address"
+                value={user?.email || ""}
+                disabled
+              />
             </div>
           </div>
 

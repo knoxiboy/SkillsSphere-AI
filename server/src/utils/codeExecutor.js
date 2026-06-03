@@ -2,6 +2,70 @@ import axios from 'axios';
 
 import logger from "./logger.js";
 
+export const CODE_EXECUTION_ERROR_CODES = {
+  UNSUPPORTED_LANGUAGE: "UNSUPPORTED_LANGUAGE",
+  CODE_INPUT_TOO_LARGE: "CODE_INPUT_TOO_LARGE",
+};
+
+export const SUPPORTED_CODE_LANGUAGES = Object.freeze({
+  javascript: { language: "javascript", version: "18.15.0" },
+  python: { language: "python", version: "3.10.0" },
+  cpp: { language: "c++", version: "10.2.0" },
+});
+
+const DEFAULT_MAX_CODE_INPUT_BYTES = 64 * 1024;
+
+export const getMaxCodeInputBytes = () => {
+  const configuredLimit = Number(process.env.MAX_CODE_INPUT_BYTES);
+  return Number.isSafeInteger(configuredLimit) && configuredLimit > 0
+    ? configuredLimit
+    : DEFAULT_MAX_CODE_INPUT_BYTES;
+};
+
+const safeErrorResult = (errorCode, output) => ({
+  output,
+  isError: true,
+  errorCode,
+});
+
+const normalizeLanguage = (language) => {
+  if (typeof language !== "string") return null;
+  const normalized = language.trim().toLowerCase();
+  if (!/^[a-z0-9+#-]+$/.test(normalized)) return null;
+  return normalized;
+};
+
+export const validateCodeExecutionRequest = (language, code) => {
+  const normalizedLanguage = normalizeLanguage(language);
+  if (!normalizedLanguage || !SUPPORTED_CODE_LANGUAGES[normalizedLanguage]) {
+    return {
+      isValid: false,
+      result: safeErrorResult(
+        CODE_EXECUTION_ERROR_CODES.UNSUPPORTED_LANGUAGE,
+        "UNSUPPORTED_LANGUAGE: This code language is not supported.",
+      ),
+    };
+  }
+
+  const sourceCode = typeof code === "string" ? code : "";
+  if (Buffer.byteLength(sourceCode, "utf8") > getMaxCodeInputBytes()) {
+    return {
+      isValid: false,
+      result: safeErrorResult(
+        CODE_EXECUTION_ERROR_CODES.CODE_INPUT_TOO_LARGE,
+        "CODE_INPUT_TOO_LARGE: Code input is too large.",
+      ),
+    };
+  }
+
+  return {
+    isValid: true,
+    normalizedLanguage,
+    sourceCode,
+    targetLanguage: SUPPORTED_CODE_LANGUAGES[normalizedLanguage],
+  };
+};
+
 /**
  * Executes code using the public Piston API.
  * @param {string} language - The programming language (e.g., 'javascript', 'python', 'cpp')
@@ -9,32 +73,20 @@ import logger from "./logger.js";
  * @returns {Promise<{output: string, isError: boolean}>}
  */
 export const executeCode = async (language, code) => {
+  const validation = validateCodeExecutionRequest(language, code);
+  if (!validation.isValid) {
+    return validation.result;
+  }
+
   try {
-    // Map common frontend language names to Piston language identifiers
-    const languageMap = {
-      javascript: { language: 'javascript', version: '18.15.0' }, // Node.js
-      python: { language: 'python', version: '3.10.0' },
-      cpp: { language: 'c++', version: '10.2.0' },
-      html: { language: 'html', version: '0.0.0' }, // Not executed by Piston usually
-      css: { language: 'css', version: '0.0.0' }
-    };
-
-    const targetLang = languageMap[language] || { language, version: '*' };
-
-    // HTML/CSS doesn't execute in a standard backend terminal way.
-    if (language === 'html' || language === 'css') {
-      return { 
-        output: "HTML and CSS cannot be executed in the backend terminal. Use a browser preview instead.", 
-        isError: true 
-      };
-    }
+    const targetLang = validation.targetLanguage;
 
     const response = await axios.post('https://emacs.piston.rs/api/v2/execute', {
       language: targetLang.language,
       version: targetLang.version,
       files: [
         {
-          content: code
+          content: validation.sourceCode
         }
       ]
     });

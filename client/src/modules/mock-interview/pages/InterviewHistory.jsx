@@ -263,8 +263,8 @@ const InterviewHistory = () => {
 
           {/* Header Section */}
           <header className="mb-8 text-center max-w-3xl mx-auto relative pt-4 animate-[fadeIn_0.8s_ease-out]">
-            <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-6 drop-shadow-sm leading-tight">
-              <span className="text-blue-600 dark:text-blue-500">Interview</span> History
+            <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-4 drop-shadow-sm">
+              <span className="bg-gradient-to-r from-blue-600 via-purple-500 to-teal-400 bg-clip-text text-transparent">Interview</span> History
             </h1>
             <p className="text-gray-500 dark:text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
               Review your past mock interviews, export reports, and track your progression over time.

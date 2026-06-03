@@ -170,8 +170,8 @@ const InterviewResults = () => {
 
           {/* Header */}
           <div className="text-center animate-[fadeIn_0.8s_ease-out] relative pt-4">
-            <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-6 drop-shadow-sm leading-tight">
-              <span className="text-blue-600 dark:text-blue-500">Interview</span> Results
+            <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-4 drop-shadow-sm">
+              <span className="bg-gradient-to-r from-blue-600 via-purple-500 to-teal-400 bg-clip-text text-transparent">Interview</span> Results
             </h1>
         <div className="flex justify-center gap-4 mt-2 flex-wrap">
           <span className="py-1 px-3 rounded-full text-xs font-semibold bg-gradient-to-br from-indigo-500 to-purple-500 text-white">

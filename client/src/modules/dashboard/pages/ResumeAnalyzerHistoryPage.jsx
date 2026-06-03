@@ -120,7 +120,7 @@ const ResumeAnalyzerHistoryPage = () => {
             </div>
             
             <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight">
-              <span className="text-blue-600 dark:text-blue-500">Resume Analyzer</span> History
+              <span className="bg-gradient-to-r from-blue-600 via-purple-500 to-teal-400 bg-clip-text text-transparent">Resume Analyzer</span> History
             </h1>
             
             <p className="text-gray-500 dark:text-gray-400 text-[15px] max-w-2xl mx-auto font-medium">

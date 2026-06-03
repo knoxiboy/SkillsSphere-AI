@@ -6,7 +6,6 @@ import { registerUser } from "../../features/auth/authSlice";
 import { useToast } from "../../shared/components";
 import Button from "../../shared/components/Button";
 import Input from "../../shared/components/Input";
-import Select from "../../shared/components/Select";
 import GoogleOAuthButton from "../../shared/components/GoogleOAuthButton";
 import Navbar from "../../shared/components/Navbar";
 import { API_URL } from "../../config/env";
@@ -18,7 +17,6 @@ const registerSchema = z.object({
   email: z.string().min(1, "Email is required").email("Please enter a valid email"),
   password: z.string().min(1, "Password is required"),
   confirmPassword: z.string().min(1, "Please confirm your password"),
-  role: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
@@ -71,7 +69,6 @@ const Register = () => {
     email: "",
     password: "",
     confirmPassword: "",
-    role: "student",
   });
 
   const [errors, setErrors] = useState({});
@@ -84,13 +81,6 @@ const Register = () => {
 
     if (errors[id] || errors.form) {
       setErrors({ ...errors, [id]: "", form: "" });
-    }
-  };
-
-  const handleRoleChange = (e) => {
-    setFormData({ ...formData, role: e.target.value });
-    if (errors.role || errors.form) {
-      setErrors({ ...errors, role: "", form: "" });
     }
   };
 
@@ -132,7 +122,6 @@ const Register = () => {
         name: formData.name.trim(),
         email,
         password: formData.password,
-        role: formData.role,
       }),
     );
 
@@ -157,12 +146,6 @@ const Register = () => {
       showError(message);
     }
   };
-
-  const roleOptions = [
-    { value: "student", label: "Student" },
-    { value: "tutor", label: "Tutor" },
-    { value: "recruiter", label: "Recruiter" },
-  ];
 
   const passwordsMatch =
     formData.password && formData.confirmPassword && formData.password === formData.confirmPassword;
@@ -274,15 +257,6 @@ const Register = () => {
                 <Check size={16} /> Passwords match
               </p>
             )}
-
-            <Select
-              id="role"
-              label="I am a"
-              value={formData.role}
-              onChange={handleRoleChange}
-              options={roleOptions}
-              disabled={loading}
-            />
           </div>
 
           <Button
@@ -300,7 +274,7 @@ const Register = () => {
               {errors.form}
             </p>
           )}
-          <GoogleOAuthButton role={formData.role} />
+          <GoogleOAuthButton />
         </form>
         {/* Footer */}
         <p className="text-center mt-4 sm:mt-5 text-slate-600 dark:text-slate-400 text-xs sm:text-sm">

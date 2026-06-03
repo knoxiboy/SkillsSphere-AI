@@ -1,25 +1,37 @@
 import powerVerbs from "../data/powerVerbs.json" with { type: "json" };
 
-/**
- * Advanced Readability Evaluator:
- * 1. Analyzes sentence structure for "Power Verbs"
- * 2. Identifies specific weak bullets (sentences missing action verbs)
- * 3. Detects passive voice
- */
 export default function readabilityEvaluator({ resumeText = "" }) {
-  // Clean bullet point prefixes from sentence start (fixes #230)
-  // Handles common bullet characters from PDF extraction: •, –, *, en-dash, em-dash
+
+  const PASSIVE_PENALTY = 5;
+  const LOW_VERB_PENALTY = 20;
+  const WEAK_BULLET_PENALTY = 2;
+  const MIN_VERB_DENSITY = 0.5;
+
   function cleanSentenceStart(sentence) {
     return sentence.replace(/^[\s\u2022\*\u2013\u2014•\-]+/, '').trim();
+  }
+
+  function detectDomain(text) {
+    if (/react|node|javascript|python|java|aws|sql|docker|kubernetes/gi.test(text)) return "technical";
+    if (/managed|led|budget|stakeholder|strategy|p&l|headcount/gi.test(text)) return "management";
+    if (/designed|ux|figma|wireframe|prototype|user research/gi.test(text)) return "design";
+    return "general";
+  }
+
+  function getSentenceCategory(cleanedSentence) {
+    const lower = cleanedSentence.toLowerCase();
+    if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{4})/i.test(lower)) return "date";
+    if (lower.split(/\s+/).length < 4) return "short";
+    return "bullet";
   }
 
   const sentences = resumeText
     .split(/[.!?\n]/)
     .map(s => s.trim())
-    .filter(s => s.length > 20); // Only analyze meaningful sentences
+    .filter(s => s.length > 20);
 
   const allPowerVerbs = Object.values(powerVerbs).flat().map(v => v.toLowerCase());
-  
+
   const weakBullets = [];
   const passiveVoicePatterns = [
     /\b(?:is|are|was|were|be|been|being)\b\s+\b\w+ed\b/gi,
@@ -32,66 +44,86 @@ export default function readabilityEvaluator({ resumeText = "" }) {
   let passiveVoiceCount = 0;
 
   sentences.forEach(sentence => {
-    // Clean bullet point prefixes before analysis (fixes #230)
     const cleanedSentence = cleanSentenceStart(sentence);
     const lowerSentence = cleanedSentence.toLowerCase();
     const words = lowerSentence.split(/\s+/);
-    
-    // Check for power verb at start or near start of sentence
+
     const hasPowerVerb = allPowerVerbs.some(verb => words.slice(0, 4).includes(verb));
-    
+
     if (hasPowerVerb) {
       powerVerbCount++;
     } else {
-      // It's a weak bullet if it doesn't start with an action verb
-      weakBullets.push(sentence);
+      const category = getSentenceCategory(cleanedSentence);
+      if (category === "bullet") {
+        weakBullets.push({
+          original: sentence,
+          cleaned: cleanedSentence,
+          reason: "No action verb in first 4 words",
+        });
+      }
     }
 
-    // Check for passive voice
+    // Reset lastIndex for global regex before each test
+    passiveVoicePatterns.forEach(p => p.lastIndex = 0);
     if (passiveVoicePatterns.some(pattern => pattern.test(lowerSentence))) {
       passiveVoiceCount++;
     }
   });
 
-  // Dynamic Suggestions based on domain detection
+  const domain = detectDomain(resumeText);
+  const relevantVerbs = powerVerbs[domain] ?? powerVerbs.general ?? [];
+  const verbDensity = powerVerbCount / Math.max(1, sentences.length);
+
   const suggestions = [];
-  const isTechnical = /react|node|javascript|python|java|aws|sql/gi.test(resumeText);
-  const relevantVerbs = isTechnical ? powerVerbs.technical : powerVerbs.management;
 
   if (passiveVoiceCount > 2) {
-    suggestions.push("Rewrite passive phrases (e.g., 'Responsible for') with active power verbs.");
+    suggestions.push(
+      `${passiveVoiceCount} passive voice instances detected. Rewrite with active verbs (e.g., 'Led', 'Built', 'Drove').`
+    );
   }
 
-  if (powerVerbCount / Math.max(1, sentences.length) < 0.5) {
-    suggestions.push(`Strengthen your bullets using active verbs like: ${relevantVerbs.slice(0, 3).join(", ")}.`);
+  if (verbDensity < MIN_VERB_DENSITY) {
+    suggestions.push(
+      `Verb density is ${Math.round(verbDensity * 100)}% — below 50%. Strengthen bullets using: ${relevantVerbs.slice(0, 3).join(", ")}.`
+    );
   }
 
-  // Calculate score
+  if (weakBullets.length > 3) {
+    suggestions.push(
+      `${weakBullets.length} bullets lack action verbs. Example: "${weakBullets[0]?.cleaned?.slice(0, 40)}..."`
+    );
+  }
+
   let score = 100;
   if (sentences.length > 0) {
-     score -= (passiveVoiceCount * 5);
-     const lowVerbDensity = (powerVerbCount / sentences.length) < 0.4;
-     if (lowVerbDensity) score -= 20;
+    score -= passiveVoiceCount * PASSIVE_PENALTY;
+    if (verbDensity < 0.4) score -= LOW_VERB_PENALTY;
+    else if (verbDensity < MIN_VERB_DENSITY) score -= 10;
+    score -= Math.min(weakBullets.length * WEAK_BULLET_PENALTY, 20);
   }
-  
+
   const finalScore = Math.max(0, Math.min(100, Math.round(score)));
 
   return {
     key: "readability_match",
     label: "Readability & Impact",
     score: finalScore,
-    summary: finalScore > 80 
-      ? "Strong use of action verbs and active voice." 
+    summary: finalScore > 80
+      ? "Strong use of action verbs and active voice."
       : "Some bullets are weak or use passive voice, which reduces the impact of your experience.",
     details: {
       powerVerbCount,
       passiveVoiceCount,
+      verbDensity: parseFloat(verbDensity.toFixed(2)),
+      weakBullets: weakBullets.slice(0, 5),
+      weakBulletCount: weakBullets.length,
       suggestions,
-      relevantVerbs: relevantVerbs,
+      relevantVerbs,
     },
     meta: {
       sentenceCount: sentences.length,
-      isTechnicalDomain: isTechnical
+      isTechnicalDomain: domain === "technical",
+      domain,
     }
   };
 }

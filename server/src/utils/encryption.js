@@ -1,7 +1,14 @@
 import crypto from "crypto";
 
 const getEncryptionKey = () => {
-  const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || "default_super_secret_key_skills_sphere";
+  const secret = process.env.ENCRYPTION_KEY;
+  if (!secret) {
+    throw new Error(
+      "[FATAL] ENCRYPTION_KEY environment variable is not set. " +
+      "Refusing to encrypt or decrypt data without a dedicated key. " +
+      "Set ENCRYPTION_KEY in your .env file (minimum 32 characters)."
+    );
+  }
   // Always derive a 32-byte key from the secret
   return crypto.createHash("sha256").update(secret).digest();
 };

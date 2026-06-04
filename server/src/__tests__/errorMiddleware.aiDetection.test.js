@@ -1,8 +1,11 @@
-const globalErrorHandler = require("../middleware/errorMiddleware.js");
+import globalErrorHandler from "../middleware/errorMiddleware.js";
 
 // NOTE: these tests validate AI classification gating logic.
 // They intentionally pass in a non-AI operational error whose message contains "google"
 // to ensure it is NOT re-mapped via handleAIError().
+
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
 
 describe("errorMiddleware AI detection", () => {
   const makeRes = () => {
@@ -42,11 +45,17 @@ describe("errorMiddleware AI detection", () => {
 
     globalErrorHandler(err, req, res, next);
 
-    expect(res.statusCode).toBe(502);
-    expect(res.payload.message).toBe("Operational failure while calling google service");
+    assert.equal(res.statusCode, 502);
+    assert.equal(
+      res.payload.message,
+      "Operational failure while calling google service"
+    );
 
     // If misclassified as AI, payload.message would be rewritten.
-    expect(res.payload.message).not.toMatch(/AI service is currently unavailable/i);
+    assert.equal(
+      String(res.payload.message).includes("AI service is currently unavailable"),
+      false
+    );
   });
 
   test("classifies GoogleGenerativeAI errors as AI", async () => {
@@ -67,8 +76,12 @@ describe("errorMiddleware AI detection", () => {
 
     globalErrorHandler(err, req, res, next);
 
-    expect(res.statusCode).toBe(400);
-    expect(res.payload.message).toMatch(/AI request was invalid|AI Authentication failed|AI access forbidden/i);
+    assert.equal(res.statusCode, 400);
+    assert.match(
+      res.payload.message,
+      /AI request was invalid|AI Authentication failed|AI access forbidden/i
+    );
+
   });
 });
 

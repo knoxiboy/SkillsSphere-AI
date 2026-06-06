@@ -3,6 +3,7 @@ import * as resumeService from "../resumes/service.js";
 import { parseResume } from "../../utils/parseResume.js";
 import asyncHandler from "../../utils/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
+import fsPromises from "fs/promises";
 
 /**
  * Handle matching evaluation.

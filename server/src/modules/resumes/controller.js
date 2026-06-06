@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import fsPromises from "fs/promises";
 import crypto from "crypto";
 import { parseResume } from "../../utils/parseResume.js";
 import logger from "../../utils/logger.js";
@@ -121,10 +122,6 @@ export const uploadResume = asyncHandler(async (req, res, next) => {
       mimeType: req.file.mimetype,
     },
   });
-
-  if (req.file?.path) {
-    await fsPromises.unlink(req.file.path).catch(() => {});
-  }
 });
 
 const normalizeJobSkills = (rawSkills) => {
@@ -517,7 +514,15 @@ export const deleteResume = asyncHandler(async (req, res, next) => {
   }
 
   const wasActive = resume.isActive;
+  const filePathToDelete = resume.file?.path;
   await Resume.deleteOne({ _id: id });
+
+  // Physically delete the file from disk to prevent storage leaks
+  if (filePathToDelete) {
+    await fsPromises.unlink(filePathToDelete).catch((err) => {
+      logger.warn(`Failed to physically delete resume file at ${filePathToDelete}: ${err.message}`);
+    });
+  }
 
   // If we deleted the active resume, activate the most recent fallback if available
   if (wasActive) {

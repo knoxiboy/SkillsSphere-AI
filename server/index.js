@@ -51,6 +51,7 @@ import roadmapRoutes from "./src/modules/roadmap/routes.js";
 import { initRoadmapSockets } from "./src/modules/roadmap/socket.js";
 import userRoutes from "./src/modules/users/routes.js";
 import aiAssistantRoutes from "./src/modules/ai-assistant/routes.js";
+import { geminiModel } from "./src/modules/ai-assistant/controller.js";
 import { setIO } from "./src/utils/socketIO.js";
 
 import attachSocketRateLimiter from "./src/middleware/socketRateLimiter.js";
@@ -189,7 +190,7 @@ app.get("/health", (req, res) => {
 
 // app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.post("/api/chat", protect, async (req, res) => {
+app.post("/api/chat", protect, async (req, res, next) => {
   try {
     const { message } = req.body;
     if (!message) {

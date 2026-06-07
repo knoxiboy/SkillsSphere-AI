@@ -280,6 +280,7 @@ for (const app of applications) {
       }
     }
   }
+};
 /**
  * Helper to sort and limit recommendations in memory.
  * @param {Array} jobs - List of recommendations with job details and matchScore

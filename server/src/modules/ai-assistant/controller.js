@@ -3,7 +3,7 @@ import asyncHandler from "../../middleware/asyncHandler.js";
 import logger from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
 
-let geminiModel = null;
+export let geminiModel = null;
 if (process.env.GEMINI_API_KEY) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });

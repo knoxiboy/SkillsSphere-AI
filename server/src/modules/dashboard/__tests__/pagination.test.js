@@ -91,7 +91,7 @@ test("getCoverLetters - returns paginated cover letters successfully", async () 
   assert.equal(result.body.success, true);
   assert.deepEqual(result.body.data, mockLetters);
   assert.equal(result.body.pagination.total, 15);
-  assert.equal(result.body.pagination.totalPages, 2);
+  assert.equal(result.body.pagination.pages, 2);
   assert.equal(result.body.pagination.page, 1);
 });
 

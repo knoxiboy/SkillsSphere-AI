@@ -863,6 +863,7 @@ const TalentFinderPage = () => {
             )}
           </div>
         </div>
+        </div>
       </main>
       <Footer />
     </div>

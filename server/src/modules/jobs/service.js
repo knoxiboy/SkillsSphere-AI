@@ -234,7 +234,7 @@ await JobPosting.findByIdAndDelete(id);
 
 const io = getIO();
 for (const app of applications) {
-  await Notification.create({
+  const notifDoc = await Notification.create({
     userId: app.applicant,
     type: "application",
     title: "Job Posting Removed",
@@ -242,7 +242,7 @@ for (const app of applications) {
     metadata: { jobId: id }
   });
   if (io) {
-    io.to(`user_${app.applicant}`).emit("new-notification", {});
+    io.to(`user_${app.applicant}`).emit("new-notification", notifDoc);
   }
 }
 
@@ -268,7 +268,7 @@ for (const app of applications) {
 
     const io = getIO();
     for (const app of applications) {
-      await Notification.create({
+      const notifDoc = await Notification.create({
         userId: app.applicant,
         type: "application",
         title: "Job Posting Removed",
@@ -276,7 +276,7 @@ for (const app of applications) {
         metadata: { jobId: id }
       });
       if (io) {
-        io.to(`user_${app.applicant}`).emit("new-notification", {});
+        io.to(`user_${app.applicant}`).emit("new-notification", notifDoc);
       }
     }
   }
@@ -502,26 +502,15 @@ export const getRecruiterAnalytics = async (recruiterId) => {
     { $sort: { "_id.year": 1, "_id.month": 1 } },
   ]);
 
-  const jobsByMonth = jobsByMonthAgg.map((item) => ({
-    month: `${item._id.year}-${String(item._id.month).padStart(2, "0")}`,
-    count: item.count,
-  }));
-
-  // Top skills across all jobs
-  const skillCount = {};
-  allJobs.forEach((job) => {
-    (job.skills || []).forEach((skill) => {
-      const normalized = skill.toLowerCase().trim();
-      if (normalized) {
-        skillCount[normalized] = (skillCount[normalized] || 0) + 1;
-      }
-    });
-  });
-
-  const topSkills = Object.entries(skillCount)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([skill, count]) => ({ skill, count }));
+  const topSkillsAgg = await JobPosting.aggregate([
+  { $match: { recruiter: new mongoose.Types.ObjectId(recruiterId) } },
+  { $unwind: "$skills" },
+  { $group: { _id: { $toLower: "$skills" }, count: { $sum: 1 } } },
+  { $sort: { count: -1 } },
+  { $limit: 10 },
+  { $project: { skill: "$_id", count: 1, _id: 0 } }
+]);
+const topSkills = topSkillsAgg;
 
   // Recent jobs (last 5)
   const recentJobs = allJobs.slice(0, 5).map((job) => ({

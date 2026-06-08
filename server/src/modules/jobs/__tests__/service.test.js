@@ -9,7 +9,6 @@ import Notification from "../../../database/models/Notification.js";
 import * as resumeService from "../../resumes/service.js";
 import matchingService from "../../matching/service.js";
 import mongoose from "mongoose";
-import Notification from "../../../database/models/Notification.js";
 
 describe("Job Service", () => {
   afterEach(() => {

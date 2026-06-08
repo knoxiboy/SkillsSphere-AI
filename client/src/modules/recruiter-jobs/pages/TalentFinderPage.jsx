@@ -282,34 +282,53 @@ const TalentFinderPage = () => {
   // PRESENTATION LAYER (MARKDOWN VIEW LAYOUT)
   // ============================================================================
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-[radial-gradient(circle_at_top_left,#0f172a,#020617)] p-4 sm:p-6 pt-24 sm:pt-32 text-gray-900 dark:text-slate-100 transition-colors duration-200">
+    <div className="min-h-screen bg-gray-50/50 dark:bg-[#09090b] text-gray-900 dark:text-text-main font-sans pt-20 flex flex-col">
       <Navbar />
 
-      <div className="mx-auto max-w-7xl w-full space-y-8">
-        
-        {/* Module Header Segment */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900/20 p-6 rounded-3xl border border-gray-200/60 dark:border-white/5 shadow-sm">
-          <div className="space-y-2">
+      <main className="flex-grow flex flex-col items-center justify-start px-4 sm:px-6 lg:px-8 pb-12 animate-fade-in relative overflow-hidden w-full">
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+          <div className="absolute -top-[10%] -left-[5%] w-[40%] h-[40%] rounded-full bg-blue-100/40 dark:bg-blue-900/10 blur-[120px]" />
+          <div className="absolute top-[20%] -right-[5%] w-[35%] h-[35%] rounded-full bg-purple-100/40 dark:bg-purple-900/10 blur-[100px]" />
+          <div className="absolute top-[5%] right-[20%] w-[35%] h-[35%] rounded-full bg-teal-50/40 dark:bg-teal-900/10 blur-[100px]" />
+        </div>
+
+        <div className="w-full max-w-[1200px] relative z-10 flex flex-col gap-6">
+          <div className="py-6 flex justify-between items-center">
             <Link 
               to="/dashboard" 
-              className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 mb-1 transition-colors"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
             >
               <ArrowLeft size={16} />
-              Back to Recruiter Central
+              Back to Dashboard
             </Link>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900 dark:text-white">
-              Talent <span className="text-gradient bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 bg-clip-text text-transparent">Finder</span>
+          </div>
+
+          <div className="text-center space-y-4 mb-6 relative">
+            <div className="hidden md:flex absolute top-4 left-4 xl:left-8 w-14 h-14 bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 rounded-2xl items-center justify-center shadow-sm transform -rotate-3 hover:rotate-0 transition-transform">
+               <User className="w-6 h-6 text-purple-600" />
+            </div>
+            <div className="hidden md:flex absolute top-8 right-4 xl:right-8 w-14 h-14 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-2xl items-center justify-center shadow-sm transform rotate-3 hover:rotate-0 transition-transform">
+               <Search className="w-6 h-6 text-emerald-600" />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-purple-50 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 shadow-sm text-[11px] font-bold text-purple-600 dark:text-purple-400 mx-auto tracking-wide uppercase">
+              <Sparkles size={12} className="text-purple-500" /> AI TALENT DISCOVERY
+            </div>
+            
+            <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight">
+              <span className="bg-gradient-to-r from-blue-600 via-purple-500 to-teal-400 bg-clip-text text-transparent">Talent</span> Finder
             </h1>
-            <p className="text-gray-500 dark:text-slate-400 text-sm max-w-2xl leading-relaxed">
-              Query the absolute candidate directory database with dynamic debouncing optimization layers. Run semantic neural intelligence match pipelines directly against live openings.
+            
+            <p className="text-gray-500 dark:text-gray-400 text-[15px] max-w-2xl mx-auto font-medium">
+              Query the global candidate registry and run neural matching against your open roles.
             </p>
           </div>
-          
+
           {/* Active Target Job Dropdown Controller Card */}
-          <div className="bg-gray-100 dark:bg-slate-900/60 border border-gray-200 dark:border-white/5 p-4 rounded-2xl flex flex-col gap-2 min-w-[320px] shadow-sm">
-            <span className="text-xs uppercase font-extrabold tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+          <div className="bg-white dark:bg-[#121214] border border-gray-100 dark:border-white/5 p-4 rounded-3xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm w-full mx-auto">
+            <span className="text-xs uppercase font-extrabold tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5 shrink-0">
               <Sparkles size={12} className="text-purple-500 dark:text-purple-400 animate-pulse" />
-              Evaluation Benchmark Node
+              Evaluation Benchmark
             </span>
             {jobsLoading ? (
               <div className="flex items-center gap-2 text-sm text-slate-400 py-1.5">
@@ -326,7 +345,7 @@ const TalentFinderPage = () => {
                   setSelectedJobId(e.target.value);
                   setMatchResultMap({}); // Purge score map arrays to prevent stale index cross-matching
                 }}
-                className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-slate-200 shadow-inner outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                className="w-full sm:max-w-md bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-800 dark:text-slate-200 shadow-inner outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
               >
                 {jobs.map(job => (
                   <option key={job._id} value={job._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
@@ -336,10 +355,9 @@ const TalentFinderPage = () => {
               </select>
             )}
           </div>
-        </div>
 
-        {/* Workspace Dual-Column Core UI Layout Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+          {/* Workspace Dual-Column Core UI Layout Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start mt-4">
           
           {/* Sidebar Panel: Advanced Filtering Parameters Controls */}
           <div className="lg:col-span-1 bg-white dark:bg-slate-900/40 border border-gray-200 dark:border-white/5 backdrop-blur-md p-6 rounded-3xl space-y-6 shadow-xl relative group">
@@ -845,9 +863,9 @@ const TalentFinderPage = () => {
             )}
           </div>
         </div>
-      </div>
+      </main>
       <Footer />
-    </main>
+    </div>
   );
 };
 

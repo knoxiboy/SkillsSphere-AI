@@ -115,7 +115,7 @@ const RecruiterInsightsPage = ({ jobId: propJobId }) => {
     : 0;
 
   return (
-    <main className="min-h-screen bg-gray-50/50 dark:bg-[#09090b] text-gray-900 dark:text-text-main font-sans pt-20 flex flex-col">
+    <div className="min-h-screen bg-gray-50/50 dark:bg-[#09090b] text-gray-900 dark:text-text-main font-sans pt-20 flex flex-col">
       <Navbar />
 
       <main className="flex-grow flex flex-col items-center justify-start px-4 sm:px-6 lg:px-8 pb-12 animate-fade-in relative overflow-hidden w-full">
@@ -411,7 +411,8 @@ const RecruiterInsightsPage = ({ jobId: propJobId }) => {
         )}
       </div>
       </main>
-    </main>
+      <Footer />
+    </div>
   );
 };
 

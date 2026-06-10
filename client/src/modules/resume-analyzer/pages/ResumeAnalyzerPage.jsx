@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useToast, ErrorState } from "../../../shared/components";
 import Navbar from "../../../shared/components/Navbar";
 import Footer from "../../../shared/components/Footer";
+import AnalysisResultSkeleton from "../components/AnalysisResultSkeleton";
+
 
 import AnalysisResult from "../components/AnalysisResult";
 import DragDropUpload from "../components/DragDropUpload";
@@ -263,7 +265,7 @@ const ResumeAnalyzerPage = () => {
             </div>
             
             <h1 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tight">
-              <span className="text-blue-600 dark:text-blue-500">Resume</span> Analyzer
+              <span className="bg-gradient-to-r from-blue-600 via-purple-500 to-teal-400 bg-clip-text text-transparent">Resume</span> Analyzer
             </h1>
             
             <p className="text-gray-500 dark:text-gray-400 text-[15px] max-w-2xl mx-auto font-medium">
@@ -274,6 +276,8 @@ const ResumeAnalyzerPage = () => {
 
           {isLoadingLatest ? (
             <ResumeSkeleton />
+          ) : loading && !result && !error ? (
+            <AnalysisResultSkeleton />
           ) : error && !result ? (
             <div className="w-full max-w-4xl mx-auto space-y-6 mt-12 bg-white dark:bg-[#121214] p-8 md:p-12 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5">
               <div className="flex items-center gap-3 text-red-600 mb-8">

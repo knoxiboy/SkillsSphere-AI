@@ -1,12 +1,5 @@
 import express from "express";
-import { getFrontendUrl } from "../../config/env.js";
-import {
-  buildGoogleAuthUrl,
-  GOOGLE_OAUTH_NOT_CONFIGURED_MESSAGE,
-  isGoogleOAuthConfigured,
-} from "../../config/googleOAuth.js";
 import { protect } from "../../middleware/authMiddleware.js";
-import logger from "../../utils/logger.js";
 
 import {
   authRateLimiter,
@@ -18,6 +11,7 @@ import {
   getMe,
   googleLogin,
   googleOAuthCallback,
+  initiateGoogleOAuth,
   login,
   logout,
   register,
@@ -44,45 +38,7 @@ const router = express.Router();
 router.get("/me", protect, getMe);
 
 // Initiate Google OAuth
-router.get("/google", (req, res) => {
-  const envFrontendOrigin = getFrontendUrl();
-  const refererHeader = req.get("referer");
-  let inferredFrontendOrigin = envFrontendOrigin;
-
-  if (refererHeader) {
-    try {
-      inferredFrontendOrigin = new URL(refererHeader).origin;
-    } catch {
-      inferredFrontendOrigin = envFrontendOrigin;
-    }
-  }
-
-  const fallbackCallback = `${inferredFrontendOrigin}/auth/callback`;
-  const requestedRedirect = req.query.redirect;
-  const role = req.query.role;
-  const redirectTarget =
-    typeof requestedRedirect === "string" && requestedRedirect.length > 0
-      ? requestedRedirect
-      : fallbackCallback;
-
-  const stateObj = { redirect: redirectTarget };
-  if (role) {
-    stateObj.role = role;
-  }
-
-  const state = encodeURIComponent(
-    Buffer.from(JSON.stringify(stateObj), "utf8").toString("base64"),
-  );
-
-  if (!isGoogleOAuthConfigured()) {
-    logger.error("[AUTH] Google OAuth env vars are missing in server/.env");
-    return res.redirect(
-      `${redirectTarget}?error=${encodeURIComponent(GOOGLE_OAUTH_NOT_CONFIGURED_MESSAGE)}`,
-    );
-  }
-
-  res.redirect(buildGoogleAuthUrl({ state }));
-});
+router.get("/google", initiateGoogleOAuth);
 
 // Callback from Google
 router.get("/google/callback", googleOAuthCallback);

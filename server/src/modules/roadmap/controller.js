@@ -5,6 +5,7 @@ import asyncHandler from "../../utils/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import { getIO } from "../../utils/socketIO.js";
 import { createNotification } from "../notifications/service.js";
+import { generateDetailedRoadmap } from "../../utils/geminiService.js";
 
 import logger from "../../utils/logger.js";
 
@@ -44,28 +45,50 @@ export const syncRoadmap = asyncHandler(async (req, res) => {
 
   let progress = await LearningProgress.findOne({ user: req.user._id });
 
-  const roadmapData = topics.map(topic => {
-    const topicName = typeof topic === "string" ? topic : topic.text;
-    const type = typeof topic === "string" ? "learning" : topic.type;
-    return {
-      topicName,
-      type,
-      status: "not_started"
-    };
-  });
+  // 1. Generate detailed roadmap via Gemini API
+  let roadmapData;
+  const aiResult = await generateDetailedRoadmap(targetRole, topics);
+  
+  if (aiResult.success && Array.isArray(aiResult.data)) {
+    // Safely format AI output to match schema
+    roadmapData = aiResult.data.map(topic => ({
+      topicName: topic.topicName || "Unknown Topic",
+      type: ["learning", "contribution"].includes(topic.type) ? topic.type : "learning",
+      status: "not_started",
+      resources: Array.isArray(topic.resources) ? topic.resources.map(res => ({
+        title: res.title || "Study Resource",
+        url: res.url || "https://google.com/search?q=" + encodeURIComponent(topic.topicName || "learning"),
+        type: ["video", "article", "documentation"].includes(res.type) ? res.type : "article",
+        tutorAssigned: false
+      })) : []
+    }));
+  } else {
+    // 2. Fallback: Basic string mapping if AI fails or times out
+    logger.warn("AI Roadmap generation failed, falling back to basic mapping. Reason:", aiResult.error);
+    roadmapData = topics.map(topic => {
+      const topicName = typeof topic === "string" ? topic : topic.text;
+      const type = typeof topic === "string" ? "learning" : topic.type;
+      return {
+        topicName,
+        type: ["learning", "contribution"].includes(type) ? type : "learning",
+        status: "not_started",
+        resources: []
+      };
+    });
+  }
 
   if (progress) {
     // If roadmap exists, we merge (don't overwrite completed topics)
     const existingTopics = new Map(progress.roadmap.map(t => [t.topicName, t]));
     
     progress.targetRole = targetRole;
-    progress.roadmap = topics.map(topic => {
-      const topicName = typeof topic === "string" ? topic : topic.text;
-      const type = typeof topic === "string" ? "learning" : topic.type;
-      if (existingTopics.has(topicName)) {
-        return existingTopics.get(topicName);
+    progress.roadmap = roadmapData.map(topic => {
+      if (existingTopics.has(topic.topicName)) {
+        // Keep existing topic status, but we can merge new resources if we wanted.
+        // For simplicity, we just keep the old topic so we don't lose status/completion.
+        return existingTopics.get(topic.topicName);
       }
-      return { topicName, type, status: "not_started" };
+      return topic;
     });
   } else {
     progress = new LearningProgress({
@@ -170,12 +193,10 @@ export const updateTopicStatus = asyncHandler(async (req, res) => {
  * Get all active student roadmaps (Tutors only)
  */
 export const getStudentsRoadmaps = asyncHandler(async (req, res) => {
-  const roadmaps = await LearningProgress.find({ tutorsTracking: req.user._id })
-    .populate("user", "name email role")
-    .lean();
-
-  // Filter only those whose user role is "student"
-  const studentRoadmaps = roadmaps.filter(r => r.user && r.user.role === "student");
+    const roadmaps = await LearningProgress.find({ tutorsTracking: req.user._id })
+  .populate({ path: "user", match: { role: "student" }, select: "name email role" })
+  .lean();
+const studentRoadmaps = roadmaps.filter(r => r.user !== null);
 
   res.status(200).json({
     success: true,

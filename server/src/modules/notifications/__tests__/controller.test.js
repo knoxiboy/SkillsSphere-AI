@@ -5,8 +5,10 @@ import {
   getUnreadCount,
   createNotification,
   getNotification,
+  isSafeNotificationActionUrl,
   markAsRead,
   markAllAsRead,
+  sanitizeNotificationMetadata,
   deleteNotificationById,
   deleteAllNotificationsForUser,
 } from "../controller.js";
@@ -55,6 +57,93 @@ describe("Notification Controller", () => {
         mockNotifications,
       );
     });
+
+    it("sanitizes unsafe actionUrl metadata before returning notifications", async () => {
+      const mockNotifications = [
+        {
+          _id: "n1",
+          title: "Unsafe",
+          metadata: {
+            actionUrl: "https://evil.com",
+            relatedModel: "JobPosting",
+          },
+        },
+        {
+          _id: "n2",
+          title: "Safe",
+          metadata: {
+            actionUrl: "/dashboard",
+          },
+        },
+      ];
+      mock.method(Notification, "find", () => ({
+        sort: () => ({ skip: () => ({ limit: () => ({ populate: () => mockNotifications }) }) }),
+      }));
+      mock.method(Notification, "countDocuments", () => 2);
+
+      getNotifications(req, res, next);
+      await flush();
+
+      const data = res.json.mock.calls[0].arguments[0].data;
+      assert.equal("actionUrl" in data[0].metadata, false);
+      assert.equal(data[0].metadata.relatedModel, "JobPosting");
+      assert.equal(data[1].metadata.actionUrl, "/dashboard");
+    });
+
+    it("should throw AppError(400) when type filter is invalid", async () => {
+      req.query = { type: "invalid-category" };
+      getNotifications(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should throw AppError(400) when type filter is too long", async () => {
+      req.query = { type: "a".repeat(51) };
+      getNotifications(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should respond with 200 when a valid type filter is provided", async () => {
+      const mockNotifications = [{ _id: "n1", title: "Test", type: "job-update" }];
+      mock.method(Notification, "find", () => ({
+        sort: () => ({ skip: () => ({ limit: () => ({ populate: () => mockNotifications }) }) }),
+      }));
+      mock.method(Notification, "countDocuments", () => 1);
+
+      req.query = { type: "jobs" };
+      getNotifications(req, res, next);
+      await flush();
+
+      assert.equal(res.status.mock.calls[0].arguments[0], 200);
+      assert.equal(res.json.mock.calls[0].arguments[0].success, true);
+    });
+
+    it("should query for system and message types when system filter is requested", async () => {
+      let passedFilters;
+      mock.method(Notification, "find", (filters) => {
+        passedFilters = filters;
+        return {
+          sort: () => ({ skip: () => ({ limit: () => ({ populate: () => [] }) }) }),
+        };
+      });
+      mock.method(Notification, "countDocuments", () => 0);
+
+      req.query = { type: "system" };
+      getNotifications(req, res, next);
+      await flush();
+
+      assert.equal(res.status.mock.calls[0].arguments[0], 200);
+      assert.deepEqual(passedFilters.type, {
+        $in: ["info", "warning", "success", "error", "skill_gap_alert", "system", "message"],
+      });
+    });
   });
 
   describe("getUnreadCount", () => {
@@ -94,6 +183,22 @@ describe("Notification Controller", () => {
       assert.equal(res.status.mock.calls[0].arguments[0], 201);
       assert.equal(res.json.mock.calls[0].arguments[0].success, true);
       assert.deepEqual(res.json.mock.calls[0].arguments[0].data, mockCreated);
+    });
+
+    it("should validate and accept system, message, and application_status types", async () => {
+      for (const t of ["system", "message", "application_status"]) {
+        req.body = { ...validBody(), userId: req.user._id, type: t };
+        const mockCreated = { _id: "n1", ...req.body };
+        mock.method(Notification, "create", () => ({
+          populate: () => mockCreated,
+        }));
+
+        createNotification(req, res, next);
+        await flush();
+
+        assert.equal(res.status.mock.calls[res.status.mock.calls.length - 1].arguments[0], 201);
+        mock.restoreAll();
+      }
     });
 
     it("should throw AppError(403) when userId does not match authenticated user", async () => {
@@ -169,6 +274,121 @@ describe("Notification Controller", () => {
       assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
       assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
       assert.ok(next.mock.calls[0].arguments[0].errors.type);
+    });
+
+    it("preserves safe internal actionUrl metadata when creating notifications", async () => {
+      req.body = {
+        ...validBody(),
+        userId: req.user._id,
+        metadata: {
+          actionUrl: "/jobs/123",
+          relatedModel: "JobPosting",
+        },
+      };
+      let persistedData;
+
+      mock.method(Notification, "create", (data) => {
+        persistedData = data;
+        return {
+          ...data,
+          _id: "n1",
+          populate: () => ({ ...data, _id: "n1" }),
+        };
+      });
+
+      createNotification(req, res, next);
+      await flush();
+
+      assert.equal(persistedData.metadata.actionUrl, "/jobs/123");
+      assert.equal(
+        res.json.mock.calls[0].arguments[0].data.metadata.actionUrl,
+        "/jobs/123",
+      );
+    });
+
+    it("sanitizes malicious external actionUrl metadata before persistence", async () => {
+      req.body = {
+        ...validBody(),
+        userId: req.user._id,
+        metadata: {
+          actionUrl: "https://evil.com",
+          relatedModel: "JobPosting",
+        },
+      };
+      let persistedData;
+
+      mock.method(Notification, "create", (data) => {
+        persistedData = data;
+        return {
+          ...data,
+          _id: "n1",
+          populate: () => ({ ...data, _id: "n1" }),
+        };
+      });
+
+      createNotification(req, res, next);
+      await flush();
+
+      assert.equal("actionUrl" in persistedData.metadata, false);
+      assert.equal(
+        "actionUrl" in res.json.mock.calls[0].arguments[0].data.metadata,
+        false,
+      );
+      assert.equal(persistedData.metadata.relatedModel, "JobPosting");
+    });
+
+    it("sanitizes encoded malicious actionUrl metadata before persistence", async () => {
+      req.body = {
+        ...validBody(),
+        userId: req.user._id,
+        metadata: {
+          actionUrl: "%2F%2Fevil.com",
+          relatedId: null,
+        },
+      };
+      let persistedData;
+
+      mock.method(Notification, "create", (data) => {
+        persistedData = data;
+        return {
+          ...data,
+          _id: "n1",
+          populate: () => ({ ...data, _id: "n1" }),
+        };
+      });
+
+      createNotification(req, res, next);
+      await flush();
+
+      assert.equal("actionUrl" in persistedData.metadata, false);
+      assert.equal(persistedData.metadata.relatedId, null);
+    });
+  });
+
+  describe("notification actionUrl safety", () => {
+    it("accepts safe internal notification paths", () => {
+      for (const actionUrl of ["/dashboard", "/profile", "/jobs/123"]) {
+        assert.equal(isSafeNotificationActionUrl(actionUrl), true);
+        assert.equal(sanitizeNotificationMetadata({ actionUrl }).actionUrl, actionUrl);
+      }
+    });
+
+    it("rejects unsafe notification action URLs", () => {
+      const unsafeActionUrls = [
+        "https://evil.com",
+        "http://evil.com",
+        "//evil.com",
+        "javascript:alert(1)",
+        "%2F%2Fevil.com",
+        "https%3A%2F%2Fevil.com",
+        "%",
+        "/\\evil.com",
+      ];
+
+      for (const actionUrl of unsafeActionUrls) {
+        assert.equal(isSafeNotificationActionUrl(actionUrl), false);
+        assert.equal("actionUrl" in sanitizeNotificationMetadata({ actionUrl }), false);
+      }
     });
   });
 

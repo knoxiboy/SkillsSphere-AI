@@ -8,7 +8,60 @@ import registerWebRTCHandler from "./socketHandlers/webrtcHandler.js";
 import registerWhiteboardHandler from "./socketHandlers/whiteboardHandler.js";
 import registerCodeEditorHandler from "./socketHandlers/codeEditorHandler.js";
 
+import redisClient from "../../config/redis.js";
+
 const roomStates = new Map();
+
+const getRedisKey = (roomId) => `classroom:state:${roomId}`;
+
+export async function loadRoomState(roomId, session = null) {
+  if (roomStates.has(roomId)) return roomStates.get(roomId);
+
+  const key = getRedisKey(roomId);
+  if (redisClient.isReady) {
+    try {
+      const cached = await redisClient.get(key);
+      if (cached) {
+        const state = JSON.parse(cached);
+        roomStates.set(roomId, state);
+        return state;
+      }
+    } catch (err) {
+      logger.error(`Redis loadRoomState error for ${roomId}:`, err);
+    }
+  }
+
+  // Fallback: load from database
+  const activeSession = session || await ClassroomSession.findOne({ roomId, status: "active" });
+  const state = {
+    chatHistory: activeSession ? activeSession.chatHistory || [] : [],
+    code: activeSession ? activeSession.codeSnapshot || "" : "",
+    whiteboard: activeSession ? activeSession.whiteboardSnapshot || [] : []
+  };
+
+  roomStates.set(roomId, state);
+
+  if (redisClient.isReady) {
+    try {
+      await redisClient.set(key, JSON.stringify(state));
+    } catch (err) {
+      logger.error(`Redis save default state error for ${roomId}:`, err);
+    }
+  }
+  return state;
+}
+
+export function persistRoomState(roomId) {
+  const state = roomStates.get(roomId);
+  if (!state) return;
+
+  const key = getRedisKey(roomId);
+  if (redisClient.isReady) {
+    redisClient.set(key, JSON.stringify(state)).catch((err) => {
+      logger.error(`Redis persistRoomState error for ${roomId}:`, err);
+    });
+  }
+}
 
 export function getOrCreateRoomState(roomId) {
   if (!roomStates.has(roomId)) {
@@ -23,6 +76,12 @@ export function getOrCreateRoomState(roomId) {
 
 export function clearRoomState(roomId) {
   roomStates.delete(roomId);
+  const key = getRedisKey(roomId);
+  if (redisClient.isReady) {
+    redisClient.del(key).catch((err) => {
+      logger.error(`Redis clearRoomState error for ${roomId}:`, err);
+    });
+  }
 }
 
 export function getRoomState(roomId) {
@@ -30,6 +89,67 @@ export function getRoomState(roomId) {
 }
 
 export function initClassroomSockets(io) {
+  // Start a periodic background sweeper to clean up empty classroom sessions across all instances
+  setInterval(async () => {
+    try {
+      const activeSessions = await ClassroomSession.find({ status: "active" });
+
+      for (const session of activeSessions) {
+        let activeSockets = [];
+        try {
+          activeSockets = await io.in(session.roomId).fetchSockets();
+        } catch (fetchErr) {
+          logger.error(`Error fetching sockets for room ${session.roomId}:`, fetchErr);
+          continue;
+        }
+
+        if (activeSockets.length === 0) {
+          // If the room has no active socket connections, check/set emptySince
+          if (!session.emptySince) {
+            logger.log(`Background Sweeper: Room ${session.roomId} is empty. Starting 30-second teardown countdown...`);
+            session.emptySince = new Date();
+            await session.save();
+          } else {
+            const gracePeriodMs = 30000; // 30 seconds
+            const cutoffTime = new Date(Date.now() - gracePeriodMs);
+            if (session.emptySince < cutoffTime) {
+              logger.log(`Background Sweeper: Ending empty classroom session ${session.roomId}`);
+              session.status = "ended";
+              session.endedAt = new Date();
+              await session.save();
+
+              await clearRoomState(session.roomId);
+              clearRoomLock(session.roomId);
+            }
+          }
+        } else {
+          // If there are active sockets, ensure emptySince is null and participants list in DB is updated/cleaned
+          let dbChanged = false;
+          if (session.emptySince !== null) {
+            session.emptySince = null;
+            dbChanged = true;
+          }
+
+          // Clean up participants in DB that are no longer active sockets
+          const activeSocketIds = new Set(activeSockets.map((s) => s.id));
+          const updatedParticipants = (session.participants || []).filter((p) =>
+            activeSocketIds.has(p.socketId)
+          );
+          if (updatedParticipants.length !== (session.participants || []).length) {
+            session.participants = updatedParticipants;
+            dbChanged = true;
+          }
+
+          if (dbChanged) {
+            await session.save();
+          }
+        }
+      }
+    } catch (err) {
+      logger.error("Background Sweeper Error:", err);
+    }
+  }, 10000); // Check every 10 seconds
+
   io.on("connection", (socket) => {
     logger.log(`Socket connected: ${socket.id}`);
 
@@ -75,13 +195,42 @@ export function initClassroomSockets(io) {
           },
         };
 
+        // Ensure state is loaded from Redis/DB into memory
+        await loadRoomState(roomId, session);
+
         logger.log(
           `User ${socket.data.user.name} (${socket.id}) joining room ${roomId}`,
         );
 
-        // Update database: remove any existing/stale socket for this user in this room to prevent duplicates
+        // Count active socket connections for this user in this room to prevent spam
+        const roomSockets = io.sockets.adapter.rooms.get(roomId);
+        let userConnectionCount = 0;
+        if (roomSockets) {
+          for (const socketId of roomSockets) {
+            const connectedSocket = io.sockets.sockets.get(socketId);
+            if (
+              connectedSocket &&
+              connectedSocket.data &&
+              connectedSocket.data.user &&
+              connectedSocket.data.user.id === userIdStr &&
+              connectedSocket.id !== socket.id
+            ) {
+              userConnectionCount += 1;
+            }
+          }
+        }
+
+        if (userConnectionCount >= 3) {
+          socket.emit("unauthorized", {
+            message: "Connection limit exceeded (maximum 3 active connections allowed)",
+          });
+          socket.disconnect(true);
+          return;
+        }
+
+        // Update database: actively purge any stale/ghost socket IDs for this specific user
         session.participants = (session.participants || []).filter(
-          (p) => p.user.id.toString() !== userIdStr && p.socketId !== socket.id
+          (p) => p.socketId !== socket.id && p.user?.id !== userIdStr
         );
 
         // Add this new active socket participant
@@ -89,6 +238,9 @@ export function initClassroomSockets(io) {
           socketId: socket.id,
           user: socket.data.user,
         });
+
+        // Reset emptySince timer since a user has joined
+        session.emptySince = null;
 
         await session.save();
 
@@ -131,10 +283,13 @@ export function initClassroomSockets(io) {
     registerCodeEditorHandler(io, socket);
 
     // Disconnect
-    socket.on("disconnect", async () => {
-      logger.log(`Socket disconnected: ${socket.id}`);
-      if (socket.data && socket.data.roomId) {
-        const { roomId, user } = socket.data;
+    socket.on("disconnecting", async () => {
+      logger.log(`Socket disconnecting: ${socket.id}`);
+      // Find all rooms this socket joined (excluding its own private room)
+      const joinedRooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
+
+      for (const roomId of joinedRooms) {
+        const user = socket.data?.user || { name: "Participant", role: "student" };
 
         // Broadcast to others in the room first
         socket.to(roomId).emit("user-left", {
@@ -143,9 +298,9 @@ export function initClassroomSockets(io) {
         });
 
         const lock = getRoomLock(roomId);
-        const release = await lock.acquire();
-
+        let release;
         try {
+          release = await lock.acquire();
           const session = await ClassroomSession.findOne({
             roomId,
             status: "active",
@@ -158,7 +313,7 @@ export function initClassroomSockets(io) {
             );
 
             // Sync transient in-memory state back to DB archive on disconnect
-            const finalState = getRoomState(roomId);
+            const finalState = await getRoomState(roomId);
             if (finalState) {
               session.chatHistory = finalState.chatHistory || [];
               session.codeSnapshot = finalState.code || "";
@@ -167,22 +322,20 @@ export function initClassroomSockets(io) {
 
             // Automatically teardown/end the classroom session in database if empty
             if (session.participants.length === 0) {
-              logger.log(`Classroom ${roomId} empty. Automatically ending session.`);
-              session.status = "ended";
-              session.endedAt = new Date();
-
-              clearRoomState(roomId);
-              clearRoomLock(roomId);
+              logger.log(`Classroom ${roomId} empty. Initiating 30-second teardown countdown...`);
+              session.emptySince = new Date();
             }
 
             await session.save();
           }
         } catch (error) {
-          logger.error("Error during socket disconnect cleanup:", error);
+          logger.error(`Error during socket disconnect cleanup for room ${roomId}:`, error);
         } finally {
-          release();
+          if (release) release();
         }
       }
     });
   });
 }
+
+

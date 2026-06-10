@@ -12,23 +12,19 @@ validateEnv();
 setupGlobalLogSanitizer();
 
 
-// Trigger nodemon restart!!!!!
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import http from "http";
 import { Server } from "socket.io";
-import swaggerUi from "swagger-ui-express";
 import { logEvaluatorConfig } from "./src/config/evaluatorConfig.js";
 import redisClient, { connectRedis } from "./src/config/redis.js";
 // import swaggerSpec from "./src/config/swaggerConfig.js";
 import connectDB, { isConnected } from "./src/database/db.js";
-import { verifySocketToken } from "./src/middleware/authMiddleware.js";
+import { protect, verifySocketToken } from "./src/middleware/authMiddleware.js";
 import globalErrorHandler from "./src/middleware/errorMiddleware.js";
 import { globalLimiter } from "./src/middleware/rateLimiter.js";
 import requireDB from "./src/middleware/requireDB.js";
 import {
   SOCKET_AUTH_ERROR_CODES,
   createSocketAuthError,
-  getSocketAuthErrorMessage,
 } from "./src/middleware/socketAuthError.js";
 import analyticsRoutes from "./src/modules/analytics/routes.js";
 import authRoutes from "./src/modules/auth/routes.js";
@@ -51,9 +47,9 @@ import roadmapRoutes from "./src/modules/roadmap/routes.js";
 import { initRoadmapSockets } from "./src/modules/roadmap/socket.js";
 import userRoutes from "./src/modules/users/routes.js";
 import aiAssistantRoutes from "./src/modules/ai-assistant/routes.js";
+import { geminiModel } from "./src/modules/ai-assistant/controller.js";
 import { setIO } from "./src/utils/socketIO.js";
-import { protect } from "./src/middleware/authMiddleware.js";
-import swaggerSpec from "./src/config/swaggerConfig.js";
+
 import attachSocketRateLimiter from "./src/middleware/socketRateLimiter.js";
 
 const app = express();
@@ -148,45 +144,55 @@ app.use((req, res, next) => {
 // Apply global rate limiting to all /api routes
 app.use("/api", globalLimiter);
 
-await connectDB();
-await connectRedis();
+// Safe startup: MongoDB/Redis may be temporarily unavailable.
+// Keep server running in degraded mode instead of crashing the process.
+let didConnectRedis = false;
+try {
+  await connectDB();
+  
+  // Clear ghost sockets from active classroom sessions on server startup to prevent WebRTC continuity issues
+  const ClassroomSession = (await import("./src/database/models/ClassroomSession.js")).default;
+  const resetResult = await ClassroomSession.updateMany(
+    { status: "active" },
+    { $set: { participants: [] } }
+  );
+  if (resetResult.modifiedCount > 0) {
+    logger.log(`Cleared ghost participants from ${resetResult.modifiedCount} active classroom(s)`);
+  }
+} catch (err) {
+  logger.error(
+    "MongoDB startup error (degraded mode):",
+    err instanceof Error ? err.message : err,
+  );
+}
+
+try {
+  await connectRedis();
+  didConnectRedis = true;
+} catch (err) {
+  logger.error(
+    "Redis startup error (degraded mode):",
+    err instanceof Error ? err.message : err,
+  );
+}
+
+// Expose a simple readiness signal for /health without relying on redisClient internals.
+globalThis.__REDIS_READY__ = didConnectRedis;
+
 logEvaluatorConfig();
 
-// Initialize Gemini AI client logic moved to src/modules/ai-assistant/controller.js
-
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", db: isConnected ? "connected" : "disconnected" });
+  res.json({
+    status: "OK",
+    db: isConnected ? "connected" : "disconnected",
+    redis: globalThis.__REDIS_READY__ ? "connected" : "disconnected",
+  });
 });
 
 // app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.post("/api/chat", protect, async (req, res) => {
-  try {
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "Message required" });
-    }
 
-    if (!geminiModel) {
-      return res.status(503).json({
-        error:
-          "AI service is currently unconfigured. Please set GEMINI_API_KEY in .env",
-      });
-    }
 
-    const prompt = `You are the "SkillsSphere Career Assistant", an expert AI specializing in tech careers, resumes, recruitment, and technical interviews. 
-Keep your answers concise, helpful, and professional. If the user asks something completely unrelated to careers or the platform, politely decline to answer.
-User message: ${message}`;
-
-    const result = await geminiModel.generateContent(prompt);
-    const reply = result.response.text();
-
-    res.json({ reply });
-  } catch (error) {
-    logger.error("Chat API error:", error);
-    next(error);
-  }
-});
 
 
 app.use("/api/auth", requireDB, authRoutes);
@@ -214,10 +220,23 @@ initRoadmapSockets(io);
 // Catch-all 404 handler for API routes
 // This prevents Express from returning HTML on missing routes, which crashes frontend JSON parsers.
 app.use("/api/*", (req, res) => {
-  res.status(404).json({ success: false, message: `API route not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({
+    success: false,
+    message: `API route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
+// Global 404 JSON handler for non-API routes.
+// Prevents Express from returning HTML for unknown routes which may break JSON-based frontend calls.
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+  });
 });
 
 app.use(globalErrorHandler);
+
 
 server.listen(PORT, () => {
   logger.log(`Server running on http://localhost:${PORT}`);

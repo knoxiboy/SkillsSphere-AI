@@ -11,20 +11,124 @@ import {
   getUnreadNotificationCount,
 } from "./service.js";
 
+const decodeActionUrl = (value) => {
+  let decoded = value;
+
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const nextDecoded = decodeURIComponent(decoded);
+      if (nextDecoded === decoded) break;
+      decoded = nextDecoded;
+    } catch {
+      return null;
+    }
+  }
+
+  return decoded;
+};
+
+export const isSafeNotificationActionUrl = (value) => {
+  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+    return false;
+  }
+
+  if (/[\s\\\u0000-\u001F\u007F]/.test(value)) {
+    return false;
+  }
+
+  const decoded = decodeActionUrl(value);
+  if (!decoded || decoded.length === 0 || decoded !== decoded.trim()) {
+    return false;
+  }
+
+  if (/[\s\\\u0000-\u001F\u007F]/.test(decoded)) {
+    return false;
+  }
+
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(decoded)) {
+    return false;
+  }
+
+  return decoded.startsWith("/") && !decoded.startsWith("//");
+};
+
+export const sanitizeNotificationMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+
+  const sanitized = { ...metadata };
+  if ("actionUrl" in sanitized) {
+    const decodedActionUrl = decodeActionUrl(sanitized.actionUrl);
+    if (isSafeNotificationActionUrl(sanitized.actionUrl)) {
+      sanitized.actionUrl = decodedActionUrl;
+    } else {
+      delete sanitized.actionUrl;
+    }
+  }
+
+  return sanitized;
+};
+
+const serializeNotification = (notification) => {
+  const serialized =
+    notification && typeof notification.toObject === "function"
+      ? notification.toObject()
+      : notification;
+
+  if (!serialized || typeof serialized !== "object") {
+    return serialized;
+  }
+
+  if (!("metadata" in serialized)) {
+    return serialized;
+  }
+
+  return {
+    ...serialized,
+    metadata: sanitizeNotificationMetadata(serialized.metadata),
+  };
+};
+
 /**
  * @desc    Get all notifications for authenticated user
  * @route   GET /api/notifications
  * @access  Private
  */
 export const getNotifications = asyncHandler(async (req, res) => {
-  const { page, limit, isRead } = req.query;
+  const { page, limit, isRead, type } = req.query;
   const userId = req.user._id;
 
-  const result = await getUserNotifications(userId, { page, limit, isRead });
+  if (type) {
+    if (typeof type !== "string" || type.length > 50) {
+      throw new AppError("Invalid type filter", 400);
+    }
+    const validTypes = [
+      "jobs",
+      "interviews",
+      "system",
+      "message",
+      "info",
+      "warning",
+      "success",
+      "error",
+      "job-update",
+      "interview",
+      "application",
+      "new_application",
+      "skill_gap_alert",
+      "application_status",
+    ];
+    if (!validTypes.includes(type)) {
+      throw new AppError(`Type filter must be one of: ${validTypes.join(", ")}`, 400);
+    }
+  }
+
+  const result = await getUserNotifications(userId, { page, limit, isRead, type });
 
   res.status(200).json({
     success: true,
-    data: result.notifications,
+    data: result.notifications.map(serializeNotification),
     pagination: result.pagination,
     message: "Notifications retrieved successfully",
   });
@@ -74,6 +178,9 @@ export const createNotification = asyncHandler(async (req, res) => {
       "application",
       "new_application",
       "skill_gap_alert",
+      "application_status",
+      "system",
+      "message",
     ];
     if (!validTypes.includes(type)) {
       validationErrors.type = `Type must be one of: ${validTypes.join(", ")}`;
@@ -95,12 +202,12 @@ export const createNotification = asyncHandler(async (req, res) => {
     title,
     message,
     type,
-    metadata,
+    metadata: sanitizeNotificationMetadata(metadata),
   });
 
   res.status(201).json({
     success: true,
-    data: notification,
+    data: serializeNotification(notification),
     message: "Notification created successfully",
   });
 });
@@ -118,7 +225,7 @@ export const getNotification = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: notification,
+    data: serializeNotification(notification),
     message: "Notification retrieved successfully",
   });
 });
@@ -136,7 +243,7 @@ export const markAsRead = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: notification,
+    data: serializeNotification(notification),
     message: "Notification marked as read",
   });
 });

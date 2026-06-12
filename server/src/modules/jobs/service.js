@@ -609,11 +609,54 @@ export const applyToJob = async (jobId, applicantId, options = {}) => {
     throw new AppError("You have already applied to this job", 409);
   }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const client = mongoose.connection?.client;
+  const topologyType = client?.topology?.description?.type;
+  const useTransaction = topologyType && (
+    topologyType.includes("ReplicaSet") ||
+    topologyType === "Sharded" ||
+    (client?.topology?.description?.servers && client.topology.description.servers.size > 1)
+  );
 
   let application;
-  try {
+  if (useTransaction) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const appDocs = await JobApplication.create([{
+        job: jobId,
+        applicant: applicantId,
+        resume: options.resumeId || null,
+        resumeLink: options.resumeLink.trim(),
+        coverNote: options.coverNote?.trim() || "",
+        statusHistory: [{ status: "pending", comment: "Application submitted" }],
+      }], { session });
+      
+      application = appDocs[0];
+
+      const notifDocs = await Notification.create([{
+        userId: job.recruiter,
+        type: "new_application",
+        title: "New Job Application",
+        message: `A new candidate has applied for ${job.title}.`,
+        relatedData: { jobId: job._id, applicationId: application._id, studentId: applicantId }
+      }], { session });
+
+      await session.commitTransaction();
+
+      const io = getIO();
+      if (io && notifDocs[0]) {
+        io.to(`user_${job.recruiter}`).emit("new-notification", notifDocs[0]);
+      }
+
+    } catch (error) {
+      await session.abortTransaction();
+      logger.error("Transaction aborted in applyToJob:", error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  } else {
     const appDocs = await JobApplication.create([{
       job: jobId,
       applicant: applicantId,
@@ -621,7 +664,7 @@ export const applyToJob = async (jobId, applicantId, options = {}) => {
       resumeLink: options.resumeLink.trim(),
       coverNote: options.coverNote?.trim() || "",
       statusHistory: [{ status: "pending", comment: "Application submitted" }],
-    }], { session });
+    }]);
     
     application = appDocs[0];
 
@@ -631,21 +674,12 @@ export const applyToJob = async (jobId, applicantId, options = {}) => {
       title: "New Job Application",
       message: `A new candidate has applied for ${job.title}.`,
       relatedData: { jobId: job._id, applicationId: application._id, studentId: applicantId }
-    }], { session });
-
-    await session.commitTransaction();
+    }]);
 
     const io = getIO();
-    if (io) {
+    if (io && notifDocs[0]) {
       io.to(`user_${job.recruiter}`).emit("new-notification", notifDocs[0]);
     }
-
-  } catch (error) {
-    await session.abortTransaction();
-    logger.error("Transaction aborted in applyToJob:", error);
-    throw error;
-  } finally {
-    session.endSession();
   }
 
   // Evaluate candidate match asynchronously

@@ -1,5 +1,6 @@
 import compression from "compression";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import express from "express";
 import mongoose from "mongoose";
@@ -141,9 +142,32 @@ app.use(express.json({ limit: "1mb" }));
 app.use(requestLogger);
 
 // Security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "https:", "data:"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "no-referrer" },
+    permittedCrossDomainPolicies: false,
+  }),
+);
 app.use((req, res, next) => {
-  res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
 });
 

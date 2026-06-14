@@ -1,5 +1,6 @@
 import asyncHandler from "../../utils/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
+import mongoose from "mongoose";
 import {
   createNotification as createNotificationService,
   getUserNotifications,
@@ -312,6 +313,11 @@ export const deleteNotificationsBulk = asyncHandler(async (req, res) => {
 
   if (!ids || !Array.isArray(ids) || ids.length === 0) {
     throw new AppError("Invalid or empty notification IDs list", 400);
+  }
+
+  const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidIds.length > 0) {
+    throw new AppError("Invalid notification ID format", 400);
   }
 
   const result = await deleteNotificationsBulkService(ids, userId.toString());

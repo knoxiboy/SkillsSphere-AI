@@ -476,7 +476,7 @@ describe("Notification Controller", () => {
     it("should respond with 200 and deleted count when valid IDs list is provided", async () => {
       mock.method(Notification, "deleteMany", () => ({ deletedCount: 2 }));
 
-      req.body = { ids: ["n1", "n2"] };
+      req.body = { ids: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"] };
       deleteNotificationsBulk(req, res, next);
       await flush();
 
@@ -500,6 +500,26 @@ describe("Notification Controller", () => {
 
     it("should throw AppError(400) when ids parameter is missing", async () => {
       req.body = {};
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should throw AppError(400) when ids contains an invalid ObjectId", async () => {
+      req.body = { ids: ["not-a-valid-objectid"] };
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should throw AppError(400) when ids is a mix of valid and invalid ObjectIds", async () => {
+      req.body = { ids: ["507f1f77bcf86cd799439011", "invalid-id"] };
       deleteNotificationsBulk(req, res, next);
       await flush();
 

@@ -140,8 +140,16 @@ export function initClassroomSockets(io) {
               await redisClient.del(presenceKey);
             }
 
-            // Retrieve all presence keys for this room across all active nodes in the cluster
-            const presenceKeys = await redisClient.keys(getPresencePattern(freshSession.roomId));
+            // Retrieve all presence keys for this room across all active nodes in the cluster without blocking Redis
+            const pattern = getPresencePattern(freshSession.roomId);
+            const presenceKeys = [];
+            let cursor = 0;
+            do {
+              const res = await redisClient.scan(cursor, { MATCH: pattern, COUNT: 100 });
+              cursor = res.cursor;
+              presenceKeys.push(...res.keys);
+            } while (cursor !== 0);
+
             for (const key of presenceKeys) {
               try {
                 const data = await redisClient.get(key);

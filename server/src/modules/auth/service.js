@@ -312,9 +312,7 @@ export const findOrCreateGoogleUser = async ({ email, name, picture, role = "stu
     return existing;
   }
 
-  if (action === "login") {
-    throw new AppError("No account found with this Google email. Please sign up first.", 404);
-  }
+  // Allow seamless signup even if the user clicked the Google button on the Login page.
 
   return User.create({
     name,

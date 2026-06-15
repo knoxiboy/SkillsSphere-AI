@@ -1135,69 +1135,107 @@ export const getApplicantAnalytics = async (recruiterId) => {
     },
   ]);
 
-  // Dynamic Hiring Intelligence Metrics
-  const allApps = await JobApplication.find({ job: { $in: jobIds } }).lean();
+  // Dynamic Hiring Intelligence Metrics (Aggregation Pipeline)
+  const [metricsAgg] = await JobApplication.aggregate([
+    { $match: { job: { $in: jobIds } } },
+    {
+      $group: {
+        _id: null,
+        totalScored: {
+          $sum: { $cond: [{ $isNumber: "$aiMatchScore" }, 1, 0] }
+        },
+        totalScoreSum: {
+          $sum: { $cond: [{ $isNumber: "$aiMatchScore" }, "$aiMatchScore", 0] }
+        },
+        topCandidatesCount: {
+          $sum: { $cond: [{ $and: [{ $isNumber: "$aiMatchScore" }, { $gte: ["$aiMatchScore", 85] }] }, 1, 0] }
+        },
+        totalAtsScored: {
+          $sum: { $cond: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, 1, 0] }
+        },
+        totalAtsSum: {
+          $sum: { $cond: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, "$matchBreakdown.atsCompatibility", 0] }
+        },
+        atsReadyCount: {
+          $sum: { $cond: [{ $and: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, { $gte: ["$matchBreakdown.atsCompatibility", 80] }] }, 1, 0] }
+        },
+        lowAtsCount: {
+          $sum: {
+            $cond: [
+              { $and: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, { $lt: ["$matchBreakdown.atsCompatibility", 50] }] },
+              1,
+              0
+            ]
+          }
+        },
+        ossContributorCount: {
+          $sum: {
+            $cond: [
+              { $in: ["$matchBreakdown.contributionActivity", ["High", "Medium"]] },
+              1,
+              0
+            ]
+          }
+        },
+        activeRoadmapCount: {
+          $sum: {
+            $cond: [
+              { $in: ["$matchBreakdown.careerReadiness", ["High", "Medium"]] },
+              1,
+              0
+            ]
+          }
+        },
+        excellentMatchCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Excellent Match"] }, 1, 0] }
+        },
+        moderateMatchCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Moderate Match"] }, 1, 0] }
+        },
+        growthPotentialCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Growth Potential"] }, 1, 0] }
+        },
+        weakAlignmentCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Weak Alignment"] }, 1, 0] }
+        }
+      }
+    }
+  ]);
 
-  let totalScored = 0;
-  let totalScoreSum = 0;
-  let topCandidatesCount = 0;
-  
-  let totalAtsScored = 0;
-  let totalAtsSum = 0;
-  let atsReadyCount = 0;
-  let lowAtsCount = 0;
-
-  let ossContributorCount = 0;
-  let activeRoadmapCount = 0;
-
-  const matchCategoryDistribution = {
-    "Excellent Match": 0,
-    "Moderate Match": 0,
-    "Growth Potential": 0,
-    "Weak Alignment": 0
+  const metrics = metricsAgg || {
+    totalScored: 0,
+    totalScoreSum: 0,
+    topCandidatesCount: 0,
+    totalAtsScored: 0,
+    totalAtsSum: 0,
+    atsReadyCount: 0,
+    lowAtsCount: 0,
+    ossContributorCount: 0,
+    activeRoadmapCount: 0,
+    excellentMatchCount: 0,
+    moderateMatchCount: 0,
+    growthPotentialCount: 0,
+    weakAlignmentCount: 0
   };
 
-  allApps.forEach(app => {
-    // AI Match Scores
-    if (app.aiMatchScore !== null && app.aiMatchScore !== undefined) {
-      totalScored += 1;
-      totalScoreSum += app.aiMatchScore;
-      if (app.aiMatchScore >= 85) {
-        topCandidatesCount += 1;
-      }
-    }
+  const matchCategoryDistribution = {
+    "Excellent Match": metrics.excellentMatchCount,
+    "Moderate Match": metrics.moderateMatchCount,
+    "Growth Potential": metrics.growthPotentialCount,
+    "Weak Alignment": metrics.weakAlignmentCount
+  };
 
-    if (app.matchCategory) {
-      if (matchCategoryDistribution[app.matchCategory] !== undefined) {
-        matchCategoryDistribution[app.matchCategory] += 1;
-      }
-    }
-
-    // Breakdown details
-    if (app.matchBreakdown) {
-      const ats = app.matchBreakdown.atsCompatibility;
-      if (ats !== null && ats !== undefined) {
-        totalAtsScored += 1;
-        totalAtsSum += ats;
-        if (ats >= 80) {
-          atsReadyCount += 1;
-        }
-        if (ats < 50) {
-          lowAtsCount += 1;
-        }
-      }
-
-      const contr = app.matchBreakdown.contributionActivity;
-      if (contr === "High" || contr === "Medium") {
-        ossContributorCount += 1;
-      }
-
-      const career = app.matchBreakdown.careerReadiness;
-      if (career === "High" || career === "Medium") {
-        activeRoadmapCount += 1;
-      }
-    }
-  });
+  const {
+    totalScored,
+    totalScoreSum,
+    topCandidatesCount,
+    totalAtsScored,
+    totalAtsSum,
+    atsReadyCount,
+    lowAtsCount,
+    ossContributorCount,
+    activeRoadmapCount
+  } = metrics;
 
   const averageAiMatchScore = totalScored > 0 ? Math.round(totalScoreSum / totalScored) : 0;
   const averageAtsScore = totalAtsScored > 0 ? Math.round(totalAtsSum / totalAtsScored) : 0;

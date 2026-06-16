@@ -85,16 +85,16 @@ export const createSession = async ({ userId, topic, difficulty, persona }) => {
     },
   }));
 
-  const session = await InterviewSession.create({
+ const session = await InterviewSession.create({
     userId,
     topic,
     difficulty,
-    persona,
     answers,
     totalQuestions: answers.length,
     currentQuestionIndex: 0,
     startedAt: new Date(),
-  });
+    ...(persona && { persona }),
+});
 
   return session;
 };
@@ -128,10 +128,11 @@ export const processAnswerSubmission = async ({
       throw new AppError("Answer submission already in progress for this session", 429);
     }
   } else {
-    if (pendingSubmissions.get(sessionId)) {
+    const pending = pendingSubmissions.get(sessionId);
+    if (pending && Date.now() - pending < 60000) {
       throw new AppError("Answer submission already in progress for this session", 429);
     }
-    pendingSubmissions.set(sessionId, true);
+    pendingSubmissions.set(sessionId, Date.now());
   }
 
   try {
@@ -218,6 +219,7 @@ export const processAnswerSubmission = async ({
 
     // Move to next question
     session.currentQuestionIndex = currentIndex + 1;
+    session.lastActivityAt = new Date();
     await session.save();
 
     // Prepare response
@@ -227,6 +229,7 @@ export const processAnswerSubmission = async ({
           index: currentIndex + 1,
           questionText: session.answers[currentIndex + 1].questionText,
           questionId: session.answers[currentIndex + 1].questionId,
+          bookmarked: Boolean(session.answers[currentIndex + 1].bookmarked),
         }
       : null;
 
@@ -300,28 +303,46 @@ export const finalizeInterview = async (sessionId, userId) => {
   // Calculate duration
   const duration = Math.round((Date.now() - session.startedAt.getTime()) / 1000);
 
-  const dbSession = await mongoose.startSession();
-  dbSession.startTransaction();
+  const client = mongoose.connection?.client;
+  const topologyType = client?.topology?.description?.type;
+  const useTransaction = topologyType && (
+    topologyType.includes("ReplicaSet") ||
+    topologyType === "Sharded" ||
+    (client?.topology?.description?.servers && client.topology.description.servers.size > 1)
+  );
 
-  try {
+  if (useTransaction) {
+    const dbSession = await mongoose.startSession();
+    dbSession.startTransaction();
+
+    try {
+      session.status = "completed";
+      session.overallScore = overallScore;
+      session.weakConcepts = weakConcepts;
+      session.duration = duration;
+      session.completedAt = new Date();
+      
+      // Save within the transaction
+      await session.save({ session: dbSession });
+      
+      // If future logic updates LearningProgress here, it should pass { session: dbSession }
+      
+      await dbSession.commitTransaction();
+    } catch (error) {
+      await dbSession.abortTransaction();
+      logger.error("Transaction aborted in finalizeInterview:", error);
+      throw error;
+    } finally {
+      dbSession.endSession();
+    }
+  } else {
     session.status = "completed";
     session.overallScore = overallScore;
     session.weakConcepts = weakConcepts;
     session.duration = duration;
     session.completedAt = new Date();
     
-    // Save within the transaction
-    await session.save({ session: dbSession });
-    
-    // If future logic updates LearningProgress here, it should pass { session: dbSession }
-    
-    await dbSession.commitTransaction();
-  } catch (error) {
-    await dbSession.abortTransaction();
-    logger.error("Transaction aborted in finalizeInterview:", error);
-    throw error;
-  } finally {
-    dbSession.endSession();
+    await session.save();
   }
 
   return {
@@ -344,18 +365,66 @@ export const finalizeInterview = async (sessionId, userId) => {
 export const getUserInterviewHistory = async (userId, page, limit) => {
   const skip = (page - 1) * limit;
 
-  const [sessions, total] = await Promise.all([
-    InterviewSession.find({ userId })
-      .select("topic difficulty status overallScore totalQuestions duration createdAt completedAt")
+  const [sessions, total, analyticsSessions] = await Promise.all([
+    InterviewSession.find({ userId, status: { $ne: "abandoned" } })
+      .select("topic difficulty status overallScore totalQuestions duration weakConcepts createdAt completedAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    InterviewSession.countDocuments({ userId }),
+    InterviewSession.countDocuments({ userId, status: { $ne: "abandoned" } }),
+    InterviewSession.find({ userId, status: "completed" })
+      .select("topic overallScore weakConcepts completedAt createdAt")
+      .sort({ completedAt: 1, createdAt: 1 })
+      .lean(),
   ]);
+
+  const scoredSessions = analyticsSessions.filter((session) =>
+    Number.isFinite(Number(session.overallScore)),
+  );
+  const averageScore = scoredSessions.length
+    ? Math.round(
+        scoredSessions.reduce((sum, session) => sum + Number(session.overallScore), 0) /
+          scoredSessions.length,
+      )
+    : 0;
+
+  const improvementTrend = scoredSessions.map((session) => ({
+    sessionId: session._id,
+    topic: session.topic,
+    score: Number(session.overallScore),
+    date: session.completedAt || session.createdAt,
+  }));
+
+  const weakConceptCounts = {};
+  analyticsSessions.forEach((session) => {
+    (session.weakConcepts || []).forEach((concept) => {
+      weakConceptCounts[concept] = (weakConceptCounts[concept] || 0) + 1;
+    });
+  });
+
+  const weakTopicCounts = {};
+  scoredSessions
+    .filter((session) => Number(session.overallScore) < 70)
+    .forEach((session) => {
+      weakTopicCounts[session.topic] = (weakTopicCounts[session.topic] || 0) + 1;
+    });
 
   return {
     sessions,
+    analytics: {
+      averageScore,
+      completedCount: scoredSessions.length,
+      improvementTrend,
+      weakConcepts: Object.entries(weakConceptCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([concept, count]) => ({ concept, count })),
+      weakTopics: Object.entries(weakTopicCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([topic, count]) => ({ topic, count })),
+    },
     pagination: {
       page,
       limit,
@@ -385,16 +454,84 @@ export const getSessionResults = async (sessionId, userId) => {
     duration: session.duration,
     totalQuestions: session.totalQuestions,
     answers: session.answers.map((a) => ({
+      questionId: a.questionId,
       questionText: a.questionText,
       transcript: a.transcript,
       scores: a.scores,
       concepts: a.concepts,
       fillerWords: a.fillerWords,
       speakingSpeed: a.speakingSpeed,
+      bookmarked: Boolean(a.bookmarked),
     })),
     startedAt: session.startedAt,
     completedAt: session.completedAt,
   };
+};
+
+export const updateQuestionBookmark = async ({
+  sessionId,
+  userId,
+  questionId,
+  bookmarked,
+}) => {
+  const session = await InterviewSession.findOne({
+    _id: sessionId,
+    userId,
+  });
+
+  if (!session) {
+    throw new AppError("Interview session not found", 404);
+  }
+
+  const answer = session.answers.find(
+    (item) => item.questionId?.toString() === questionId,
+  );
+
+  if (!answer) {
+    throw new AppError("Question not found in interview session", 404);
+  }
+
+  answer.bookmarked =
+    typeof bookmarked === "boolean" ? bookmarked : !answer.bookmarked;
+
+  await session.save({ validateModifiedOnly: true });
+
+  return {
+    sessionId: session._id,
+    questionId: answer.questionId,
+    questionText: answer.questionText,
+    bookmarked: Boolean(answer.bookmarked),
+  };
+};
+
+export const getBookmarkedQuestions = async (userId) => {
+  const sessions = await InterviewSession.find({
+    userId,
+    "answers.bookmarked": true,
+  })
+    .select("topic difficulty status overallScore createdAt completedAt answers")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return sessions.flatMap((session) =>
+    (session.answers || [])
+      .filter((answer) => answer.bookmarked)
+      .map((answer) => ({
+        sessionId: session._id,
+        topic: session.topic,
+        difficulty: session.difficulty,
+        status: session.status,
+        overallScore: session.overallScore,
+        createdAt: session.createdAt,
+        completedAt: session.completedAt,
+        questionId: answer.questionId,
+        questionText: answer.questionText,
+        transcript: answer.transcript,
+        scores: answer.scores,
+        concepts: answer.concepts,
+        bookmarked: true,
+      })),
+  );
 };
 
 /**
@@ -497,6 +634,7 @@ export const getTutorSessionDetails = async (sessionId, tutorId) => {
       concepts: a.concepts || { detected: [], missed: [], expected: [] },
       fillerWords: a.fillerWords,
       speakingSpeed: a.speakingSpeed,
+      bookmarked: Boolean(a.bookmarked),
     })),
     startedAt: session.startedAt,
     completedAt: session.completedAt,
@@ -623,5 +761,33 @@ export const addTutorFeedback = async (sessionId, tutorId, { tutorOverallScore, 
     }
 
     return session;
+  }
+};
+
+/**
+ * Background task to clean up stale interview sessions.
+ * Finds sessions that have been in_progress for more than 2 hours with no activity
+ * and marks them as abandoned. Also cleans up pendingSubmissions map.
+ */
+export const cleanupStaleInterviewSessions = async () => {
+  try {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const result = await InterviewSession.updateMany(
+      { status: "in_progress", lastActivityAt: { $lt: twoHoursAgo } },
+      { $set: { status: "abandoned" } }
+    );
+    if (result.modifiedCount > 0) {
+      logger.info(`[interview-sweeper] Marked ${result.modifiedCount} stale interview sessions as abandoned.`);
+    }
+
+    // Also clean up stale in-memory locks
+    const now = Date.now();
+    for (const [sessionId, timestamp] of pendingSubmissions.entries()) {
+      if (now - timestamp > 60000) {
+        pendingSubmissions.delete(sessionId);
+      }
+    }
+  } catch (err) {
+    logger.error("[interview-sweeper] Error cleaning up stale sessions:", err);
   }
 };

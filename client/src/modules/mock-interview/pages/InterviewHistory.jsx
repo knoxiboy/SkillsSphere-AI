@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchInterviewHistory, clearInterviewsError } from "../../../features/interviews/interviewsSlice";
 import { getHistory } from "../services/interviewService";
 import Pagination from "../../../shared/components/Pagination";
 import {
@@ -11,10 +13,15 @@ import {
   Download,
   FileJson,
   ArrowLeft,
-  Trash2,
   History,
   Brain,
   Sparkles,
+  Search,
+  RotateCcw,
+  Bookmark,
+  TrendingUp,
+  BarChart3,
+  Target,
 } from "lucide-react";
 import Navbar from "../../../shared/components/Navbar";
 import Footer from "../../../shared/components/Footer";
@@ -24,6 +31,14 @@ import logger from "../../../utils/logger";
 
 const EXPORT_CSV_FILENAME = "interview-history.csv";
 const EXPORT_JSON_FILENAME = "interview-history.json";
+
+const DEFAULT_FILTERS = {
+  search: "",
+  difficulty: "",
+  status: "",
+  minScore: "",
+  maxScore: "",
+};
 
 const toDisplayValue = (value) => {
   if (Array.isArray(value)) return value.filter(Boolean).join("; ");
@@ -42,6 +57,140 @@ const getNestedScore = (session, key) =>
     session?.scoreBreakdown?.[key],
   );
 
+const getSessionTitle = (session) =>
+  firstAvailable(session?.title, session?.topic, session?.type, "Mock Interview");
+
+const getSessionScore = (session) => {
+  const score = Number(firstAvailable(session?.overallScore, session?.score, session?.scores?.overall, 0));
+  return Number.isFinite(score) ? score : 0;
+};
+
+const getSessionStatus = (session) =>
+  String(
+    firstAvailable(
+      session?.status,
+      session?.interviewStatus,
+      session?.state,
+      session?.completedAt || session?.finishedAt ? "completed" : "unknown",
+    ),
+  )
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+
+export const filterInterviewSessions = (interviews, filters = DEFAULT_FILTERS) => {
+  const searchTerm = filters.search.trim().toLowerCase();
+  const minScore = filters.minScore === "" ? null : Number(filters.minScore);
+  const maxScore = filters.maxScore === "" ? null : Number(filters.maxScore);
+  const difficulty = filters.difficulty.toLowerCase();
+  const status = filters.status.toLowerCase();
+
+  return interviews.filter((session) => {
+    const title = String(getSessionTitle(session)).toLowerCase();
+    const topic = String(session?.topic || "").toLowerCase();
+    const sessionDifficulty = String(session?.difficulty || "").toLowerCase();
+    const sessionStatus = getSessionStatus(session);
+    const score = getSessionScore(session);
+
+    const matchesSearch = !searchTerm || title.includes(searchTerm) || topic.includes(searchTerm);
+    const matchesDifficulty = !difficulty || sessionDifficulty === difficulty;
+    const matchesStatus = !status || sessionStatus === status;
+    const matchesMinScore = minScore === null || score >= minScore;
+    const matchesMaxScore = maxScore === null || score <= maxScore;
+
+    return matchesSearch && matchesDifficulty && matchesStatus && matchesMinScore && matchesMaxScore;
+  });
+};
+
+const normalizeCountItems = (items = [], labelKey) =>
+  items
+    .map((item) => {
+      if (typeof item === "string") return { label: item, count: 1 };
+      return {
+        label: item?.[labelKey] || item?.label || item?.topic || item?.concept || "",
+        count: Number(item?.count || 0),
+      };
+    })
+    .filter((item) => item.label);
+
+const countItems = (items) =>
+  Object.entries(
+    items.reduce((acc, item) => {
+      if (!item) return acc;
+      acc[item] = (acc[item] || 0) + 1;
+      return acc;
+    }, {}),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([label, count]) => ({ label, count }));
+
+export const calculateInterviewAnalytics = (interviews = [], serverAnalytics = null) => {
+  const completedSessions = interviews.filter((session) => getSessionStatus(session) === "completed");
+  const scoredSessions = completedSessions.filter((session) => Number.isFinite(getSessionScore(session)));
+  const localTrend = scoredSessions
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(firstAvailable(a.completedAt, a.createdAt)).getTime() -
+        new Date(firstAvailable(b.completedAt, b.createdAt)).getTime(),
+    )
+    .map((session, index) => ({
+      label: `#${index + 1}`,
+      topic: session.topic || getSessionTitle(session),
+      score: getSessionScore(session),
+      date: firstAvailable(session.completedAt, session.createdAt),
+    }));
+
+  const trend = serverAnalytics?.improvementTrend?.length
+    ? serverAnalytics.improvementTrend.map((item, index) => ({
+        label: `#${index + 1}`,
+        topic: item.topic,
+        score: Number(item.score || 0),
+        date: item.date,
+      }))
+    : localTrend;
+
+  const averageScore =
+    serverAnalytics?.averageScore !== undefined
+      ? Number(serverAnalytics.averageScore)
+      : scoredSessions.length
+        ? Math.round(scoredSessions.reduce((sum, session) => sum + getSessionScore(session), 0) / scoredSessions.length)
+        : 0;
+
+  const weakConcepts =
+    serverAnalytics?.weakConcepts?.length
+      ? normalizeCountItems(serverAnalytics.weakConcepts, "concept")
+      : countItems(
+          completedSessions.flatMap((session) => {
+            if (Array.isArray(session.weakConcepts)) return session.weakConcepts;
+            if (Array.isArray(session.improvementAreas)) return session.improvementAreas;
+            return [];
+          }),
+        );
+
+  const weakTopics =
+    serverAnalytics?.weakTopics?.length
+      ? normalizeCountItems(serverAnalytics.weakTopics, "topic")
+      : countItems(
+          scoredSessions
+            .filter((session) => getSessionScore(session) < 70)
+            .map((session) => session.topic || getSessionTitle(session)),
+        );
+
+  const firstScore = trend[0]?.score ?? 0;
+  const lastScore = trend.at(-1)?.score ?? 0;
+  const trendDelta = trend.length > 1 ? lastScore - firstScore : 0;
+
+  return {
+    averageScore,
+    completedCount: serverAnalytics?.completedCount ?? scoredSessions.length,
+    trend,
+    trendDelta,
+    weakConcepts,
+    weakTopics,
+  };
+};
+
 const normalizeInterviewForExport = (session) => {
   const technicalScore = getNestedScore(session, "technical");
   const communicationScore = getNestedScore(session, "communication");
@@ -57,7 +206,7 @@ const normalizeInterviewForExport = (session) => {
 
   return {
     id: session?._id || session?.id || "",
-    title: firstAvailable(session?.title, session?.topic, session?.type, "Mock Interview"),
+    title: getSessionTitle(session),
     type: firstAvailable(session?.type, session?.interviewType, session?.category, session?.topic),
     dateCompleted: firstAvailable(session?.completedAt, session?.finishedAt, session?.updatedAt, session?.createdAt),
     overallScore: firstAvailable(session?.overallScore, session?.score, session?.scores?.overall),
@@ -156,34 +305,130 @@ export const exportInterviewHistoryAsJSON = (interviews) => {
   );
 };
 
+const TrendLine = ({ points }) => {
+  if (!points.length) {
+    return (
+      <div className="flex h-28 items-center justify-center rounded-xl bg-gray-50 dark:bg-white/5 text-sm font-medium text-text-muted">
+        No completed interviews yet
+      </div>
+    );
+  }
+
+  const width = 320;
+  const height = 112;
+  const padding = 12;
+  const maxScore = 100;
+  const coordinates = points.map((point, index) => {
+    const x = points.length === 1
+      ? width / 2
+      : padding + (index / (points.length - 1)) * (width - padding * 2);
+    const y = height - padding - (Math.max(0, Math.min(100, point.score)) / maxScore) * (height - padding * 2);
+    return { ...point, x, y };
+  });
+  const path = coordinates.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+
+  return (
+    <div className="h-28 rounded-xl bg-gray-50 dark:bg-white/5 p-2">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Interview score trend over time" className="h-full w-full">
+        <path d={path} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-indigo-500" />
+        {coordinates.map((point) => (
+          <circle key={`${point.label}-${point.score}-${point.x}`} cx={point.x} cy={point.y} r="4.5" className="fill-white stroke-indigo-500 dark:fill-slate-900" strokeWidth="3" />
+        ))}
+      </svg>
+    </div>
+  );
+};
+
+const AnalyticsSummary = ({ analytics }) => {
+  const trendLabel = analytics.trend.length > 1
+    ? `${analytics.trendDelta >= 0 ? "+" : ""}${analytics.trendDelta} pts`
+    : "Need 2+ interviews";
+  const trendTone = analytics.trendDelta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+
+  return (
+    <section aria-label="Interview analytics" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="rounded-2xl border border-border bg-white dark:bg-surface p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Average Score</p>
+            <p className="mt-2 text-4xl font-black text-text-main">{analytics.averageScore}%</p>
+          </div>
+          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-500/10 p-3 text-indigo-600 dark:text-indigo-300">
+            <BarChart3 size={24} />
+          </div>
+        </div>
+        <p className="mt-3 text-sm font-medium text-text-muted">
+          Based on {analytics.completedCount} completed {analytics.completedCount === 1 ? "interview" : "interviews"}.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-white dark:bg-surface p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Improvement Trend</p>
+            <p className={`mt-1 text-lg font-black ${trendTone}`}>{trendLabel}</p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 p-3 text-emerald-600 dark:text-emerald-300">
+            <TrendingUp size={24} />
+          </div>
+        </div>
+        <TrendLine points={analytics.trend} />
+      </div>
+
+      <div className="rounded-2xl border border-border bg-white dark:bg-surface p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Weak Areas</p>
+            <p className="mt-1 text-sm font-medium text-text-muted">Concepts and topics to review</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 p-3 text-amber-600 dark:text-amber-300">
+            <Target size={24} />
+          </div>
+        </div>
+
+        {analytics.weakConcepts.length === 0 && analytics.weakTopics.length === 0 ? (
+          <p className="rounded-xl bg-gray-50 dark:bg-white/5 px-3 py-4 text-sm font-medium text-text-muted">
+            No weak areas detected yet.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {[...analytics.weakConcepts, ...analytics.weakTopics.map((item) => ({ ...item, label: `Topic: ${item.label}` }))].slice(0, 6).map((item) => (
+              <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 dark:bg-white/5 px-3 py-2">
+                <span className="text-sm font-semibold text-text-main capitalize">{item.label}</span>
+                <span className="text-xs font-bold text-text-muted">{item.count}x</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
+
 const InterviewHistory = () => {
   useDocumentTitle("Interview History");
   const navigate = useNavigate();
-  const [sessions, setSessions] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const dispatch = useDispatch();
+  
+  const { sessions, pagination, analytics: serverAnalytics, isLoading: loading, error } = useSelector((state) => state.interviews);
+  
   const [exportingType, setExportingType] = useState(null);
   const [exportError, setExportError] = useState(null);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const exportInProgressRef = useRef(false);
 
-  const fetchHistory = async (page = 1) => {
-    setLoading(true);
-    try {
-      const res = await getHistory(page, 10);
-      setSessions(res.data?.sessions || []);
-      setPagination(res.data?.pagination || { page: 1, pages: 1, total: 0 });
-    } catch (err) {
-      setError("Failed to load interview history.");
-      logger.error("[InterviewHistory] Error:", err);
-    } finally {
-      setLoading(false);
-    }
+  const analytics = calculateInterviewAnalytics(sessions, serverAnalytics);
+
+  const fetchHistory = (page = 1) => {
+    dispatch(fetchInterviewHistory({ page, limit: 10 }));
   };
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+    return () => {
+      dispatch(clearInterviewsError());
+    };
+  }, [dispatch]);
 
   const formatDate = (dateStr) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -226,6 +471,17 @@ const InterviewHistory = () => {
       exportInProgressRef.current = false;
       setExportingType(null);
     }
+  };
+
+  const filteredSessions = filterInterviewSessions(sessions, filters);
+  const filtersActive = Object.values(filters).some((value) => value !== "");
+
+  const updateFilter = (key, value) => {
+    setFilters((currentFilters) => ({ ...currentFilters, [key]: value }));
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
   };
 
   if (loading) {
@@ -314,6 +570,13 @@ const InterviewHistory = () => {
               </div>
             )}
             <button
+              type="button"
+              className="bg-white dark:bg-surface text-amber-700 dark:text-amber-300 border border-border py-2 px-5 rounded-full font-semibold text-sm cursor-pointer flex items-center gap-2 hover:border-amber-400/40 transition-colors shadow-sm"
+              onClick={() => navigate("/mock-interview/bookmarks")}
+            >
+              <Bookmark size={16} /> Bookmarked Questions
+            </button>
+            <button
               className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-none py-2 px-5 rounded-full font-semibold text-sm cursor-pointer flex items-center gap-2 hover:shadow-[0_10px_20px_rgba(79,70,229,0.3)] hover:-translate-y-0.5 transition-all"
               onClick={() => navigate("/mock-interview")}
             >
@@ -325,7 +588,7 @@ const InterviewHistory = () => {
       {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl text-center">{error}</div>}
       {exportError && (
         <div role="alert" className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl text-center">
-          <AlertCircle size={16} style={{ display: "inline", marginRight: 6 }} />
+          <AlertCircle size={16} className="inline-block mr-1.5" />
           {exportError}
         </div>
       )}
@@ -344,8 +607,110 @@ const InterviewHistory = () => {
         </div>
       ) : (
         <>
+        <AnalyticsSummary analytics={analytics} />
+
+        <section className="bg-white dark:bg-surface border border-border rounded-2xl p-4 sm:p-5 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <label className="lg:col-span-2 flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-text-muted">
+              Search
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="search"
+                  value={filters.search}
+                  onChange={(event) => updateFilter("search", event.target.value)}
+                  placeholder="Search topic or title"
+                  className="w-full rounded-xl border border-border bg-gray-50 dark:bg-white/5 py-2.5 pl-9 pr-3 text-sm font-medium text-text-main outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10"
+                />
+              </div>
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-text-muted">
+              Difficulty
+              <select
+                value={filters.difficulty}
+                onChange={(event) => updateFilter("difficulty", event.target.value)}
+                className="w-full rounded-xl border border-border bg-gray-50 dark:bg-white/5 py-2.5 px-3 text-sm font-medium text-text-main outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10"
+              >
+                <option value="">All difficulties</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-text-muted">
+              Status
+              <select
+                value={filters.status}
+                onChange={(event) => updateFilter("status", event.target.value)}
+                className="w-full rounded-xl border border-border bg-gray-50 dark:bg-white/5 py-2.5 px-3 text-sm font-medium text-text-main outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10"
+              >
+                <option value="">All statuses</option>
+                <option value="completed">Completed</option>
+                <option value="in-progress">In progress</option>
+                <option value="failed">Failed</option>
+              </select>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-text-muted">
+                Min Score
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={filters.minScore}
+                  onChange={(event) => updateFilter("minScore", event.target.value)}
+                  className="w-full rounded-xl border border-border bg-gray-50 dark:bg-white/5 py-2.5 px-3 text-sm font-medium text-text-main outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-bold uppercase tracking-wide text-text-muted">
+                Max Score
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={filters.maxScore}
+                  onChange={(event) => updateFilter("maxScore", event.target.value)}
+                  className="w-full rounded-xl border border-border bg-gray-50 dark:bg-white/5 py-2.5 px-3 text-sm font-medium text-text-main outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium text-text-muted">
+              Showing {filteredSessions.length} of {sessions.length} interviews
+            </p>
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!filtersActive}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-gray-50 dark:bg-white/5 px-4 py-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 transition-colors hover:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RotateCcw size={15} />
+              Reset filters
+            </button>
+          </div>
+        </section>
+
+        {filteredSessions.length === 0 ? (
+          <div className="text-center py-16 px-8 text-text-muted flex flex-col items-center bg-white dark:bg-surface border border-border rounded-2xl shadow-sm">
+            <Search size={44} className="mb-4 text-indigo-400" />
+            <p className="mt-2 text-lg font-medium text-text-main">No matching interviews found.</p>
+            <p className="mb-6">Try adjusting your search or filters.</p>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-none py-3 px-6 rounded-xl font-semibold cursor-pointer hover:shadow-[0_10px_20px_rgba(79,70,229,0.3)] hover:-translate-y-0.5 transition-all"
+            >
+              <RotateCcw size={18} /> Reset filters
+            </button>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {sessions.map((session) => (
+          {filteredSessions.map((session) => (
             <div
               key={session._id}
               className="bg-white dark:bg-surface border border-border shadow-[0_10px_20px_rgba(0,0,0,0.02)] dark:shadow-none rounded-2xl py-6 px-8 flex items-center justify-between cursor-pointer transition-all gap-4 flex-wrap hover:border-indigo-500/50 hover:shadow-[0_15px_30px_rgba(99,102,241,0.1)] hover:-translate-y-1"
@@ -354,7 +719,7 @@ const InterviewHistory = () => {
               }
             >
               <div className="flex flex-col gap-1.5 flex-1">
-                <span className="font-bold text-xl text-text-main capitalize">{session.topic}</span>
+                <span className="font-bold text-xl text-text-main capitalize">{getSessionTitle(session)}</span>
                 <div className="flex flex-wrap gap-2.5 text-xs text-text-muted mt-2 font-medium">
                   <span className="bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded-md">{formatDate(session.createdAt)}</span>
                   <span className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md capitalize">
@@ -366,6 +731,9 @@ const InterviewHistory = () => {
                       {session.duration}s
                     </span>
                   )}
+                  <span className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md capitalize">
+                    {getSessionStatus(session).replace("-", " ")}
+                  </span>
                   <span className="bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded-md">{session.totalQuestions} questions</span>
                 </div>
               </div>
@@ -378,8 +746,9 @@ const InterviewHistory = () => {
             </div>
           ))}
         </div>
+        )}
 
-          {pagination.pages > 1 && (
+          {pagination.pages > 1 && !filtersActive && (
             <Pagination
               currentPage={pagination.page}
               totalPages={pagination.pages}

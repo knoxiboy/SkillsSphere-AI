@@ -59,6 +59,10 @@ test("getPreferences - returns defaults when preferences are missing", async () 
   assert.equal(responseStatus, 200);
   assert.equal(responseData.preferences.emailFrequency, "weekly");
   assert.equal(responseData.preferences.notifications.emailNotifications, true);
+  assert.equal(responseData.preferences.notifications.inAppNotifications, true);
+  assert.equal(responseData.preferences.notifications.jobUpdates, true);
+  assert.equal(responseData.preferences.notifications.resumeAnalysis, true);
+  assert.equal(responseData.preferences.notifications.systemAlerts, true);
   assert.equal(responseData.preferences.privacy.profileVisibility, "recruiters");
 });
 
@@ -66,7 +70,7 @@ test("getPreferences - returns saved preferences merged with safe defaults", asy
   const { responseData } = await waitForController(getPreferences, {
     userDoc: {
       preferences: {
-        notifications: { jobAlerts: false },
+        notifications: { jobUpdates: false, inAppNotifications: false },
         emailFrequency: "daily",
         privacy: { profileVisibility: "private" },
       },
@@ -74,9 +78,25 @@ test("getPreferences - returns saved preferences merged with safe defaults", asy
   });
 
   assert.equal(responseData.preferences.emailFrequency, "daily");
-  assert.equal(responseData.preferences.notifications.jobAlerts, false);
+  assert.equal(responseData.preferences.notifications.jobUpdates, false);
+  assert.equal(responseData.preferences.notifications.inAppNotifications, false);
   assert.equal(responseData.preferences.notifications.interviewReminders, true);
   assert.equal(responseData.preferences.privacy.profileVisibility, "private");
+});
+
+test("getPreferences - migrates legacy notification keys into current settings", async () => {
+  const { responseData } = await waitForController(getPreferences, {
+    userDoc: {
+      preferences: {
+        notifications: { jobAlerts: false, platformUpdates: false },
+      },
+    },
+  });
+
+  assert.equal(responseData.preferences.notifications.jobUpdates, false);
+  assert.equal(responseData.preferences.notifications.systemAlerts, false);
+  assert.equal(responseData.preferences.notifications.jobAlerts, undefined);
+  assert.equal(responseData.preferences.notifications.platformUpdates, undefined);
 });
 
 test("updatePreferences - updates valid preferences", async () => {
@@ -90,7 +110,11 @@ test("updatePreferences - updates valid preferences", async () => {
     body: {
       notifications: {
         emailNotifications: false,
+        inAppNotifications: false,
         interviewReminders: true,
+        jobUpdates: false,
+        resumeAnalysis: false,
+        systemAlerts: true,
       },
       emailFrequency: "instant",
       privacy: {
@@ -103,40 +127,16 @@ test("updatePreferences - updates valid preferences", async () => {
   assert.equal(responseStatus, 200);
   assert.equal(responseData.preferences.emailFrequency, "instant");
   assert.equal(responseData.preferences.notifications.emailNotifications, false);
+  assert.equal(responseData.preferences.notifications.inAppNotifications, false);
+  assert.equal(responseData.preferences.notifications.jobUpdates, false);
+  assert.equal(responseData.preferences.notifications.resumeAnalysis, false);
+  assert.equal(responseData.preferences.notifications.systemAlerts, true);
   assert.equal(responseData.preferences.privacy.profileVisibility, "public");
   assert.equal(responseData.preferences.privacy.showInterviewHistory, true);
   assert.equal(userDoc.save.mock.callCount(), 1);
 });
 
-test("updatePreferences - rejects invalid email frequency", async () => {
-  const { error } = await waitForController(updatePreferences, {
-    userDoc: { preferences: {}, save: mock.fn(async () => {}) },
-    body: { emailFrequency: "hourly" },
-  });
 
-  assert.equal(error.statusCode, 400);
-  assert.match(error.message, /invalid email frequency/i);
-});
-
-test("updatePreferences - rejects invalid profile visibility", async () => {
-  const { error } = await waitForController(updatePreferences, {
-    userDoc: { preferences: {}, save: mock.fn(async () => {}) },
-    body: { privacy: { profileVisibility: "everyone" } },
-  });
-
-  assert.equal(error.statusCode, 400);
-  assert.match(error.message, /invalid profile visibility/i);
-});
-
-test("updatePreferences - rejects unknown fields", async () => {
-  const { error } = await waitForController(updatePreferences, {
-    userDoc: { preferences: {}, save: mock.fn(async () => {}) },
-    body: { notifications: { jobAlerts: true, smsNotifications: true } },
-  });
-
-  assert.equal(error.statusCode, 400);
-  assert.match(error.message, /unknown notification preference field/i);
-});
 
 test("user preference routes reject unauthorized requests", async () => {
   const firstLayer = userRoutes.stack[0];

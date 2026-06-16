@@ -20,6 +20,8 @@ import AppError from "../../utils/AppError.js";
 import asyncHandler from "../../utils/asyncHandler.js";
 import { invalidateCacheByPrefix } from "../../utils/cacheHelpers.js";
 import redisClient from "../../config/redis.js";
+import mongoose from "mongoose";
+import logger from "../../utils/logger.js";
 
 /**
  * Sanitizes a string to prevent CSV Injection (Formula Injection).
@@ -76,38 +78,7 @@ export const createJobPosting = asyncHandler(async (req, res) => {
     keywords,
   } = req.body;
 
-  // Validate required fields with detailed errors
-  const validationErrors = {};
-  if (!title) validationErrors.title = "Job title is required";
-  if (!description) validationErrors.description = "Job description is required";
-  if (!skills || (Array.isArray(skills) && skills.length === 0)) {
-    validationErrors.skills = "At least one skill is required";
-  }
-  if (!location) {
-    validationErrors.location = "Location is required";
-  } else {
-    if (!location.city) validationErrors["location.city"] = "City is required";
-    if (!location.state) validationErrors["location.state"] = "State is required";
-  }
-  if (!salary) {
-    validationErrors.salary = "Salary information is required";
-  } else {
-    if (salary.min === undefined || salary.min === null) {
-      validationErrors["salary.min"] = "Minimum salary is required";
-    }
-    if (salary.max === undefined || salary.max === null) {
-      validationErrors["salary.max"] = "Maximum salary is required";
-    }
-    if (salary.min !== undefined && salary.max !== undefined && salary.min > salary.max) {
-      validationErrors["salary.max"] = "Maximum salary must be greater than or equal to minimum";
-    }
-  }
 
-  if (Object.keys(validationErrors).length > 0) {
-    const error = new AppError("Please provide all required fields", 400);
-    error.errors = validationErrors;
-    throw error;
-  }
 
   // Create job posting with recruiter from authenticated user
   const jobPosting = await JobPosting.create({
@@ -191,6 +162,7 @@ export const getJobPostingById = asyncHandler(async (req, res) => {
  */
 export const updateJobPosting = asyncHandler(async (req, res) => {
   const updatedJob = await updateJobService(req.params.id, req.body, req.user._id);
+  await invalidateCacheByPrefix("jobs");
   await invalidateAnalyticsCache(req.user._id.toString());
   res.status(200).json({
     success: true,
@@ -205,6 +177,7 @@ export const updateJobPosting = asyncHandler(async (req, res) => {
  */
 export const deleteJobPosting = asyncHandler(async (req, res) => {
   await deleteJobService(req.params.id, req.user._id);
+  await invalidateCacheByPrefix("jobs");
   await invalidateAnalyticsCache(req.user._id.toString());
   res.status(200).json({
     success: true,
@@ -340,10 +313,42 @@ export const getRankedCandidates = asyncHandler(async (req, res) => {
  */
 export const exportApplicationsToCSV = asyncHandler(async (req, res) => {
   const { status, sortBy } = req.query || {};
-  const result = await getJobAppsService(req.params.id, req.user._id, status, sortBy);
-  const applications = result.applications || result;
 
-  // Construct CSV headers
+  // Validate job ID format
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    throw new AppError("Invalid job ID format", 400);
+  }
+
+  // Validate status filter if provided
+  const allowedStatuses = ["pending", "reviewed", "shortlisted", "rejected", "withdrawn"];
+  if (status && !allowedStatuses.includes(status.trim().toLowerCase())) {
+    throw new AppError(`Invalid status filter. Allowed values: ${allowedStatuses.join(", ")}`, 400);
+  }
+
+  // Validate sort options if provided
+  const allowedSortOptions = ["matchScore", "newest", "oldest"];
+  if (sortBy && !allowedSortOptions.includes(sortBy.trim())) {
+    throw new AppError(`Invalid sort option. Allowed values: ${allowedSortOptions.join(", ")}`, 400);
+  }
+
+  const job = await JobPosting.findById(req.params.id);
+  if (!job) {
+    throw new AppError("Job posting not found", 404);
+  }
+
+  if (job.recruiter.toString() !== req.user._id.toString()) {
+    throw new AppError("You do not have permission to view these applications", 403);
+  }
+
+  logger.info(`Recruiter ${req.user._id} initiated CSV export for job ${req.params.id} (status: ${status || "all"}, sortBy: ${sortBy || "matchScore"})`);
+
+  res.status(200);
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=job-${req.params.id}-applicants.csv`
+  );
+
   const headers = [
     "Candidate Name",
     "Candidate Email",
@@ -354,6 +359,7 @@ export const exportApplicationsToCSV = asyncHandler(async (req, res) => {
     "Resume Link",
     "Cover Note"
   ];
+  res.write(headers.join(",") + "\n");
 
   const toCSVField = (value) => {
     if (value === null || value === undefined || value === "") return '"N/A"';
@@ -370,28 +376,41 @@ export const exportApplicationsToCSV = asyncHandler(async (req, res) => {
     return `"${str}"`;
   };
 
-  // Convert applications to CSV rows
-  const rows = applications.map(app => {
-    return [
-      toCSVField(app.applicant?.name),
-      toCSVField(app.applicant?.email),
-      toCSVField(app.aiMatchScore !== null && app.aiMatchScore !== undefined ? `${app.aiMatchScore}%` : null),
-      toCSVField(app.matchCategory),
-      toCSVField(app.status || "pending"),
-      toCSVField(new Date(app.createdAt).toLocaleDateString()),
-      toCSVField(app.resumeLink),
-      toCSVField(app.coverNote)
-    ].join(",");
-  });
+  let page = 1;
+  const limit = 100;
+  let hasMore = true;
 
-  const csvContent = [headers.join(","), ...rows].join("\n");
+  while (hasMore) {
+    const result = await getJobAppsService(req.params.id, req.user._id, { status, sortBy, page, limit });
+    const applications = result.applications || result;
 
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename=job-${req.params.id}-applicants.csv`
-  );
-  res.status(200).send(csvContent);
+    if (!applications || applications.length === 0) {
+      break;
+    }
+
+    const rows = applications.map(app => {
+      return [
+        toCSVField(app.applicant?.name),
+        toCSVField(app.applicant?.email),
+        toCSVField(app.aiMatchScore !== null && app.aiMatchScore !== undefined ? `${app.aiMatchScore}%` : null),
+        toCSVField(app.matchCategory),
+        toCSVField(app.status || "pending"),
+        toCSVField(new Date(app.createdAt).toLocaleDateString()),
+        toCSVField(app.resumeLink),
+        toCSVField(app.coverNote)
+      ].join(",");
+    });
+
+    res.write(rows.join("\n") + "\n");
+
+    if (applications.length < limit) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+  }
+
+  res.end();
 });
 
 /**

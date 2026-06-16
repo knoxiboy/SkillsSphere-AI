@@ -32,8 +32,15 @@ import {
   WifiOff,
   RefreshCw,
   MicOff,
-  Info
+  Info,
+  Bookmark
 } from "lucide-react";
+
+const formatTime = (seconds) => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+};
 
 const InterviewSession = () => {
   useDocumentTitle("Interview Session");
@@ -44,7 +51,16 @@ const InterviewSession = () => {
 
   // 1. Manage State, Timers, Persistence, and API operations
   const state = useInterviewState(sessionId, false);
-  const isObserver = state.session && user && user._id !== state.session.userId;
+  const {
+    session,
+    currentIndex,
+    elapsedTime,
+    recoveryMessage,
+    requestStatus,
+    mediaWarning,
+    uploadStatus,
+  } = state;
+  const isObserver = session && user && user._id !== session.userId;
 
   // 2. Manage Socket.IO Network Connectivity
   const socketState = useInterviewSocket({
@@ -64,6 +80,7 @@ const InterviewSession = () => {
     textareaRef,
     setFailedAction: state.setFailedAction,
   });
+  const { socketStatus } = socketState;
 
   // 3. Manage Microphone voice inputs (MediaRecorder API)
   const audioState = useInterviewAudio({
@@ -233,9 +250,9 @@ const InterviewSession = () => {
                   <Loader2 size={14} className="animate-spin" /> {state.requestStatus}
                 </div>
               )}
-              {audioState.mediaWarning && (
+              {state.mediaWarning && (
                 <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 p-2 rounded-lg flex items-center gap-2" role="alert">
-                  <MicOff size={14} /> {audioState.mediaWarning}
+                  <MicOff size={14} /> {state.mediaWarning}
                 </div>
               )}
               {state.uploadStatus !== "idle" && (
@@ -256,8 +273,8 @@ const InterviewSession = () => {
             </div>
             <div className="h-2.5 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
               <div
-                className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
+                className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500 w-[var(--tw-width)]"
+                style={{ '--tw-width': `${progressPercent}%` }}
               />
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
@@ -271,8 +288,34 @@ const InterviewSession = () => {
           
           {/* Question Card */}
           <div className="bg-white dark:bg-slate-900/60 rounded-3xl p-8 sm:p-10 shadow-[0_20px_40px_rgba(0,0,0,0.04)] dark:shadow-none border border-gray-200 dark:border-slate-800 flex flex-col">
-            <div className="inline-flex self-start items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold tracking-wide uppercase mb-6">
-              Question {state.currentIndex + 1}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold tracking-wide uppercase">
+                Question {state.currentIndex + 1}
+              </div>
+              {!isObserver && state.currentQuestion?.questionId && (
+                <button
+                  type="button"
+                  onClick={state.toggleCurrentQuestionBookmark}
+                  disabled={state.bookmarking}
+                  aria-pressed={Boolean(state.currentQuestion.bookmarked)}
+                  aria-label={
+                    state.currentQuestion.bookmarked
+                      ? "Remove bookmark from this question"
+                      : "Bookmark this question"
+                  }
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                    state.currentQuestion.bookmarked
+                      ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+                      : "border-gray-200 bg-gray-50 text-slate-600 hover:border-amber-300 hover:text-amber-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+                  }`}
+                >
+                  <Bookmark
+                    size={16}
+                    fill={state.currentQuestion.bookmarked ? "currentColor" : "none"}
+                  />
+                  {state.currentQuestion.bookmarked ? "Bookmarked" : "Bookmark"}
+                </button>
+              )}
             </div>
             <h2 className="text-2xl sm:text-3xl font-semibold leading-relaxed text-slate-900 dark:text-white tracking-tight">
               {state.currentQuestion?.questionText || "Loading question..."}

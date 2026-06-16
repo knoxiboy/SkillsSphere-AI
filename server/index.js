@@ -1,5 +1,6 @@
 import compression from "compression";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import express from "express";
 import mongoose from "mongoose";
@@ -7,19 +8,20 @@ import { validateEnv } from "./src/config/validateEnv.js";
 import { setupGlobalLogSanitizer } from "./src/utils/logSanitizer.js";
 import logger from "./src/utils/logger.js";
 
+// Make logger globally available to avoid 30+ import merge conflicts
+global.logger = logger;
+
 dotenv.config({ override: true });
 validateEnv();
 setupGlobalLogSanitizer();
 
 
-// Trigger nodemon restart!!!!!
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import http from "http";
 import { Server } from "socket.io";
-import swaggerUi from "swagger-ui-express";
 import { logEvaluatorConfig } from "./src/config/evaluatorConfig.js";
 import redisClient, { connectRedis } from "./src/config/redis.js";
-// import swaggerSpec from "./src/config/swaggerConfig.js";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./src/config/swaggerConfig.js";
 import connectDB, { isConnected } from "./src/database/db.js";
 import { protect, verifySocketToken } from "./src/middleware/authMiddleware.js";
 import globalErrorHandler from "./src/middleware/errorMiddleware.js";
@@ -28,19 +30,19 @@ import requireDB from "./src/middleware/requireDB.js";
 import {
   SOCKET_AUTH_ERROR_CODES,
   createSocketAuthError,
-  getSocketAuthErrorMessage,
 } from "./src/middleware/socketAuthError.js";
 import analyticsRoutes from "./src/modules/analytics/routes.js";
 import authRoutes from "./src/modules/auth/routes.js";
 import createChatRouter from "./src/modules/chat/routes.js";
 import classroomRoutes from "./src/modules/classrooms/routes.js";
-import { initClassroomSockets } from "./src/modules/classrooms/socket.js";
+import { initClassroomSockets, stopClassroomSweeper } from "./src/modules/classrooms/socket.js";
 import coverLetterRoutes from "./src/modules/coverLetters/routes.js";
 import dashboardRoutes from "./src/modules/dashboard/routes.js";
 import errorReportRoutes from "./src/modules/errors/routes.js";
 import fileRoutes from "./src/modules/files/routes.js";
 import interviewRoutes from "./src/modules/interviews/routes.js";
 import { initInterviewSockets } from "./src/modules/interviews/socket.js";
+import { cleanupStaleInterviewSessions } from "./src/modules/interviews/service.js";
 import jobRoutes from "./src/modules/jobs/routes.js";
 import matchingRoutes from "./src/modules/matching/routes.js";
 import notificationRoutes from "./src/modules/notifications/routes.js";
@@ -51,6 +53,7 @@ import roadmapRoutes from "./src/modules/roadmap/routes.js";
 import { initRoadmapSockets } from "./src/modules/roadmap/socket.js";
 import userRoutes from "./src/modules/users/routes.js";
 import aiAssistantRoutes from "./src/modules/ai-assistant/routes.js";
+import { geminiModel } from "./src/modules/ai-assistant/controller.js";
 import { setIO } from "./src/utils/socketIO.js";
 
 import attachSocketRateLimiter from "./src/middleware/socketRateLimiter.js";
@@ -128,6 +131,8 @@ setIO(io);
 // Attach per-socket rate limiter to protect against message floods
 attachSocketRateLimiter(io);
 
+import { requestLogger } from "./src/middleware/requestLogger.js";
+
 app.use(compression());
 app.use(
   cors({
@@ -136,11 +141,35 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" }));
+app.use(requestLogger);
 
 // Security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "https:", "data:"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "no-referrer" },
+    permittedCrossDomainPolicies: false,
+  }),
+);
 app.use((req, res, next) => {
-  res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
 });
 
@@ -160,7 +189,7 @@ try {
     { $set: { participants: [] } }
   );
   if (resetResult.modifiedCount > 0) {
-    logger.log(`Cleared ghost participants from ${resetResult.modifiedCount} active classroom(s)`);
+    logger.info(`Cleared ghost participants from ${resetResult.modifiedCount} active classroom(s)`);
   }
 } catch (err) {
   logger.error(
@@ -184,48 +213,18 @@ globalThis.__REDIS_READY__ = didConnectRedis;
 
 logEvaluatorConfig();
 
-
-
-// Initialize Gemini AI client logic moved to src/modules/ai-assistant/controller.js
-
 app.get("/health", (req, res) => {
   res.json({
     status: "OK",
     db: isConnected ? "connected" : "disconnected",
     redis: globalThis.__REDIS_READY__ ? "connected" : "disconnected",
-
   });
 });
 
-// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.post("/api/chat", protect, async (req, res) => {
-  try {
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "Message required" });
-    }
 
-    if (!geminiModel) {
-      return res.status(503).json({
-        error:
-          "AI service is currently unconfigured. Please set GEMINI_API_KEY in .env",
-      });
-    }
 
-    const prompt = `You are the "SkillsSphere Career Assistant", an expert AI specializing in tech careers, resumes, recruitment, and technical interviews. 
-Keep your answers concise, helpful, and professional. If the user asks something completely unrelated to careers or the platform, politely decline to answer.
-User message: ${message}`;
-
-    const result = await geminiModel.generateContent(prompt);
-    const reply = result.response.text();
-
-    res.json({ reply });
-  } catch (error) {
-    logger.error("Chat API error:", error);
-    next(error);
-  }
-});
 
 
 app.use("/api/auth", requireDB, authRoutes);
@@ -250,6 +249,11 @@ initNotificationSockets(io);
 initInterviewSockets(io);
 initRoadmapSockets(io);
 
+// Start background task for cleaning up stale interview sessions
+const interviewSweeperInterval = setInterval(() => {
+  cleanupStaleInterviewSessions();
+}, 5 * 60 * 1000); // Every 5 minutes
+
 // Catch-all 404 handler for API routes
 // This prevents Express from returning HTML on missing routes, which crashes frontend JSON parsers.
 app.use("/api/*", (req, res) => {
@@ -272,23 +276,27 @@ app.use(globalErrorHandler);
 
 
 server.listen(PORT, () => {
-  logger.log(`Server running on http://localhost:${PORT}`);
+  logger.info(`Server running on http://localhost:${PORT}`);
 });
 
 // --- Graceful Shutdown ---
 const gracefulShutdown = async (signal) => {
-  logger.log(`\nReceived ${signal}. Gracefully shutting down...`);
+  logger.info(`\nReceived ${signal}. Gracefully shutting down...`);
   try {
+    if (interviewSweeperInterval) {
+      clearInterval(interviewSweeperInterval);
+    }
+    stopClassroomSweeper();
     if (redisClient && redisClient.isReady) {
       await redisClient.quit();
-      logger.log("Redis client disconnected.");
+      logger.info("Redis client disconnected.");
     }
     if (mongoose.connection.readyState === 1) {
       await mongoose.connection.close();
-      logger.log("MongoDB connection closed.");
+      logger.info("MongoDB connection closed.");
     }
     server.close(() => {
-      logger.log("Express server closed.");
+      logger.info("Express server closed.");
       process.exit(0);
     });
 

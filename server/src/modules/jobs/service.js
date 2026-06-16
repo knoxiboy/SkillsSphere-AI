@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import JobPosting from "../../database/models/JobPosting.js";
 import JobApplication from "../../database/models/JobApplication.js";
 import Notification from "../../database/models/Notification.js";
+import User from "../../database/models/User.js";
 import * as resumeService from "../resumes/service.js";
 import matchingService from "../matching/service.js";
 import { generateRecommendations } from "../../../../ai-ml/pipeline/recommendationEngine.js";
@@ -86,7 +87,7 @@ export const getAllJobs = async (queryParams = {}) => {
 
   const [jobs, totalCount] = await Promise.all([
     JobPosting.find(filters)
-      .populate("recruiter", "name email company companyWebsite")
+      .populate("recruiter", "name email company companyWebsite linkedinUrl")
       .sort("-createdAt")
       .skip(skip)
       .limit(limit),
@@ -107,7 +108,7 @@ export const getAllJobs = async (queryParams = {}) => {
  * @returns {Promise<Object>} - Job details
  */
 export const getJobById = async (id) => {
-  const job = await JobPosting.findById(id).populate("recruiter", "name email company companyWebsite");
+  const job = await JobPosting.findById(id).populate("recruiter", "name email company companyWebsite linkedinUrl");
 
   if (!job) {
     throw new AppError("Job not found", 404);
@@ -215,6 +216,8 @@ export const deleteJob = async (id, recruiterId) => {
     const dbSession = await mongoose.startSession();
     dbSession.startTransaction();
 
+    let notificationDocs = [];
+    
     try {
       const job = await JobPosting.findById(id).session(dbSession);
 
@@ -227,24 +230,24 @@ export const deleteJob = async (id, recruiterId) => {
         throw new AppError("You do not have permission to delete this job", 403);
       }
 
-      // Delete all associated applications
-      const applications = await JobApplication.find({ job: id }).select("applicant");
-await JobApplication.deleteMany({ job: id });
-await JobPosting.findByIdAndDelete(id);
+      // Get applications within transaction
+      const applications = await JobApplication.find({ job: id }).select("applicant").session(dbSession);
 
-const io = getIO();
-for (const app of applications) {
-  await Notification.create({
-    userId: app.applicant,
-    type: "application",
-    title: "Job Posting Removed",
-    message: `A job you applied to has been removed by the recruiter.`,
-    metadata: { jobId: id }
-  });
-  if (io) {
-    io.to(`user_${app.applicant}`).emit("new-notification", {});
-  }
-}
+      // Delete all associated applications within transaction
+      await JobApplication.deleteMany({ job: id }, { session: dbSession });
+      await JobPosting.findByIdAndDelete(id, { session: dbSession });
+
+      if (applications.length > 0) {
+        const notificationsData = applications.map(app => ({
+          userId: app.applicant,
+          type: "application",
+          title: "Job Posting Removed",
+          message: `A job you applied to has been removed by the recruiter.`,
+          metadata: { jobId: id }
+        }));
+        
+        notificationDocs = await Notification.insertMany(notificationsData, { session: dbSession });
+      }
 
       await dbSession.commitTransaction();
     } catch (error) {
@@ -254,6 +257,14 @@ for (const app of applications) {
     } finally {
       dbSession.endSession();
     }
+
+    // Emit real-time notifications after successful commit
+    const io = getIO();
+    if (io && notificationDocs.length > 0) {
+      for (const notifDoc of notificationDocs) {
+        io.to(`user_${notifDoc.userId}`).emit("new-notification", notifDoc);
+      }
+    }
   } else {
     const job = await JobPosting.findById(id);
     if (!job) {
@@ -262,21 +273,27 @@ for (const app of applications) {
     if (job.recruiter.toString() !== recruiterId.toString()) {
       throw new AppError("You do not have permission to delete this job", 403);
     }
+    
     const applications = await JobApplication.find({ job: id }).select("applicant");
     await JobApplication.deleteMany({ job: id });
     await JobPosting.findByIdAndDelete(id);
 
-    const io = getIO();
-    for (const app of applications) {
-      await Notification.create({
+    if (applications.length > 0) {
+      const notificationsData = applications.map(app => ({
         userId: app.applicant,
         type: "application",
         title: "Job Posting Removed",
         message: `A job you applied to has been removed by the recruiter.`,
         metadata: { jobId: id }
-      });
-      if (io) {
-        io.to(`user_${app.applicant}`).emit("new-notification", {});
+      }));
+      
+      const notificationDocs = await Notification.insertMany(notificationsData);
+      
+      const io = getIO();
+      if (io && notificationDocs.length > 0) {
+        for (const notifDoc of notificationDocs) {
+          io.to(`user_${notifDoc.userId}`).emit("new-notification", notifDoc);
+        }
       }
     }
   }
@@ -502,26 +519,15 @@ export const getRecruiterAnalytics = async (recruiterId) => {
     { $sort: { "_id.year": 1, "_id.month": 1 } },
   ]);
 
-  const jobsByMonth = jobsByMonthAgg.map((item) => ({
-    month: `${item._id.year}-${String(item._id.month).padStart(2, "0")}`,
-    count: item.count,
-  }));
-
-  // Top skills across all jobs
-  const skillCount = {};
-  allJobs.forEach((job) => {
-    (job.skills || []).forEach((skill) => {
-      const normalized = skill.toLowerCase().trim();
-      if (normalized) {
-        skillCount[normalized] = (skillCount[normalized] || 0) + 1;
-      }
-    });
-  });
-
-  const topSkills = Object.entries(skillCount)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([skill, count]) => ({ skill, count }));
+  const topSkillsAgg = await JobPosting.aggregate([
+  { $match: { recruiter: new mongoose.Types.ObjectId(recruiterId) } },
+  { $unwind: "$skills" },
+  { $group: { _id: { $toLower: "$skills" }, count: { $sum: 1 } } },
+  { $sort: { count: -1 } },
+  { $limit: 10 },
+  { $project: { skill: "$_id", count: 1, _id: 0 } }
+]);
+const topSkills = topSkillsAgg;
 
   // Recent jobs (last 5)
   const recentJobs = allJobs.slice(0, 5).map((job) => ({
@@ -536,7 +542,7 @@ export const getRecruiterAnalytics = async (recruiterId) => {
   const result = {
     totalJobs: allJobs.length,
     statusBreakdown,
-    jobsByMonth,
+    jobsByMonth: jobsByMonthAgg,
     topSkills,
     recentJobs,
   };
@@ -604,11 +610,54 @@ export const applyToJob = async (jobId, applicantId, options = {}) => {
     throw new AppError("You have already applied to this job", 409);
   }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const client = mongoose.connection?.client;
+  const topologyType = client?.topology?.description?.type;
+  const useTransaction = topologyType && (
+    topologyType.includes("ReplicaSet") ||
+    topologyType === "Sharded" ||
+    (client?.topology?.description?.servers && client.topology.description.servers.size > 1)
+  );
 
   let application;
-  try {
+  if (useTransaction) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const appDocs = await JobApplication.create([{
+        job: jobId,
+        applicant: applicantId,
+        resume: options.resumeId || null,
+        resumeLink: options.resumeLink.trim(),
+        coverNote: options.coverNote?.trim() || "",
+        statusHistory: [{ status: "pending", comment: "Application submitted" }],
+      }], { session });
+      
+      application = appDocs[0];
+
+      const notifDocs = await Notification.create([{
+        userId: job.recruiter,
+        type: "new_application",
+        title: "New Job Application",
+        message: `A new candidate has applied for ${job.title}.`,
+        relatedData: { jobId: job._id, applicationId: application._id, studentId: applicantId }
+      }], { session });
+
+      await session.commitTransaction();
+
+      const io = getIO();
+      if (io && notifDocs[0]) {
+        io.to(`user_${job.recruiter}`).emit("new-notification", notifDocs[0]);
+      }
+
+    } catch (error) {
+      await session.abortTransaction();
+      logger.error("Transaction aborted in applyToJob:", error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  } else {
     const appDocs = await JobApplication.create([{
       job: jobId,
       applicant: applicantId,
@@ -616,7 +665,7 @@ export const applyToJob = async (jobId, applicantId, options = {}) => {
       resumeLink: options.resumeLink.trim(),
       coverNote: options.coverNote?.trim() || "",
       statusHistory: [{ status: "pending", comment: "Application submitted" }],
-    }], { session });
+    }]);
     
     application = appDocs[0];
 
@@ -626,21 +675,12 @@ export const applyToJob = async (jobId, applicantId, options = {}) => {
       title: "New Job Application",
       message: `A new candidate has applied for ${job.title}.`,
       relatedData: { jobId: job._id, applicationId: application._id, studentId: applicantId }
-    }], { session });
-
-    await session.commitTransaction();
+    }]);
 
     const io = getIO();
-    if (io) {
+    if (io && notifDocs[0]) {
       io.to(`user_${job.recruiter}`).emit("new-notification", notifDocs[0]);
     }
-
-  } catch (error) {
-    await session.abortTransaction();
-    logger.error("Transaction aborted in applyToJob:", error);
-    throw error;
-  } finally {
-    session.endSession();
   }
 
   // Evaluate candidate match asynchronously
@@ -663,7 +703,7 @@ export const getRankedCandidatesForJob = async (jobId, recruiterId, filters = {}
     _id: jobId,
     recruiter: recruiterId,
   })
-    .populate("recruiter", "name email company companyWebsite")
+    .populate("recruiter", "name email company companyWebsite linkedinUrl")
     .lean();
 
   if (!job) {
@@ -816,6 +856,46 @@ export const getJobApplications = async (jobId, recruiterId, statusOrParams, sor
     query.status = status;
   }
 
+  if (filters.q && typeof filters.q === "string") {
+    const search = filters.q.trim();
+    if (search) {
+      const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const applicantRegex = new RegExp(escapeRegex(search), "i");
+      const matchingApplicants = await User.find({
+        $or: [
+          { name: applicantRegex },
+          { email: applicantRegex },
+        ],
+      }).select("_id").lean();
+
+      query.applicant = { $in: matchingApplicants.map((applicant) => applicant._id) };
+    }
+  }
+
+  if (filters.appliedFrom || filters.appliedTo) {
+    query.createdAt = { ...query.createdAt };
+
+    if (filters.appliedFrom) {
+      const from = new Date(filters.appliedFrom);
+      if (!Number.isNaN(from.getTime())) {
+        from.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = from;
+      }
+    }
+
+    if (filters.appliedTo) {
+      const to = new Date(filters.appliedTo);
+      if (!Number.isNaN(to.getTime())) {
+        to.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = to;
+      }
+    }
+
+    if (Object.keys(query.createdAt).length === 0) {
+      delete query.createdAt;
+    }
+  }
+
   // AI Match Score Range Filters
   if (filters.minScore !== undefined && filters.minScore !== "") {
     query.aiMatchScore = { ...query.aiMatchScore, $gte: Number(filters.minScore) };
@@ -957,7 +1037,7 @@ export const getJobApplications = async (jobId, recruiterId, statusOrParams, sor
   const [applications, totalCount] = await Promise.all([
     JobApplication.find(query)
       .populate("applicant", "name email")
-      .populate("resume", "fileName")
+      .populate("resume", "fileName skills")
       .sort(sortConfig)
       .skip(skip)
       .limit(limit),
@@ -1055,69 +1135,107 @@ export const getApplicantAnalytics = async (recruiterId) => {
     },
   ]);
 
-  // Dynamic Hiring Intelligence Metrics
-  const allApps = await JobApplication.find({ job: { $in: jobIds } }).lean();
+  // Dynamic Hiring Intelligence Metrics (Aggregation Pipeline)
+  const [metricsAgg] = await JobApplication.aggregate([
+    { $match: { job: { $in: jobIds } } },
+    {
+      $group: {
+        _id: null,
+        totalScored: {
+          $sum: { $cond: [{ $isNumber: "$aiMatchScore" }, 1, 0] }
+        },
+        totalScoreSum: {
+          $sum: { $cond: [{ $isNumber: "$aiMatchScore" }, "$aiMatchScore", 0] }
+        },
+        topCandidatesCount: {
+          $sum: { $cond: [{ $and: [{ $isNumber: "$aiMatchScore" }, { $gte: ["$aiMatchScore", 85] }] }, 1, 0] }
+        },
+        totalAtsScored: {
+          $sum: { $cond: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, 1, 0] }
+        },
+        totalAtsSum: {
+          $sum: { $cond: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, "$matchBreakdown.atsCompatibility", 0] }
+        },
+        atsReadyCount: {
+          $sum: { $cond: [{ $and: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, { $gte: ["$matchBreakdown.atsCompatibility", 80] }] }, 1, 0] }
+        },
+        lowAtsCount: {
+          $sum: {
+            $cond: [
+              { $and: [{ $isNumber: "$matchBreakdown.atsCompatibility" }, { $lt: ["$matchBreakdown.atsCompatibility", 50] }] },
+              1,
+              0
+            ]
+          }
+        },
+        ossContributorCount: {
+          $sum: {
+            $cond: [
+              { $in: ["$matchBreakdown.contributionActivity", ["High", "Medium"]] },
+              1,
+              0
+            ]
+          }
+        },
+        activeRoadmapCount: {
+          $sum: {
+            $cond: [
+              { $in: ["$matchBreakdown.careerReadiness", ["High", "Medium"]] },
+              1,
+              0
+            ]
+          }
+        },
+        excellentMatchCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Excellent Match"] }, 1, 0] }
+        },
+        moderateMatchCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Moderate Match"] }, 1, 0] }
+        },
+        growthPotentialCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Growth Potential"] }, 1, 0] }
+        },
+        weakAlignmentCount: {
+          $sum: { $cond: [{ $eq: ["$matchCategory", "Weak Alignment"] }, 1, 0] }
+        }
+      }
+    }
+  ]);
 
-  let totalScored = 0;
-  let totalScoreSum = 0;
-  let topCandidatesCount = 0;
-  
-  let totalAtsScored = 0;
-  let totalAtsSum = 0;
-  let atsReadyCount = 0;
-  let lowAtsCount = 0;
-
-  let ossContributorCount = 0;
-  let activeRoadmapCount = 0;
-
-  const matchCategoryDistribution = {
-    "Excellent Match": 0,
-    "Moderate Match": 0,
-    "Growth Potential": 0,
-    "Weak Alignment": 0
+  const metrics = metricsAgg || {
+    totalScored: 0,
+    totalScoreSum: 0,
+    topCandidatesCount: 0,
+    totalAtsScored: 0,
+    totalAtsSum: 0,
+    atsReadyCount: 0,
+    lowAtsCount: 0,
+    ossContributorCount: 0,
+    activeRoadmapCount: 0,
+    excellentMatchCount: 0,
+    moderateMatchCount: 0,
+    growthPotentialCount: 0,
+    weakAlignmentCount: 0
   };
 
-  allApps.forEach(app => {
-    // AI Match Scores
-    if (app.aiMatchScore !== null && app.aiMatchScore !== undefined) {
-      totalScored += 1;
-      totalScoreSum += app.aiMatchScore;
-      if (app.aiMatchScore >= 85) {
-        topCandidatesCount += 1;
-      }
-    }
+  const matchCategoryDistribution = {
+    "Excellent Match": metrics.excellentMatchCount,
+    "Moderate Match": metrics.moderateMatchCount,
+    "Growth Potential": metrics.growthPotentialCount,
+    "Weak Alignment": metrics.weakAlignmentCount
+  };
 
-    if (app.matchCategory) {
-      if (matchCategoryDistribution[app.matchCategory] !== undefined) {
-        matchCategoryDistribution[app.matchCategory] += 1;
-      }
-    }
-
-    // Breakdown details
-    if (app.matchBreakdown) {
-      const ats = app.matchBreakdown.atsCompatibility;
-      if (ats !== null && ats !== undefined) {
-        totalAtsScored += 1;
-        totalAtsSum += ats;
-        if (ats >= 80) {
-          atsReadyCount += 1;
-        }
-        if (ats < 50) {
-          lowAtsCount += 1;
-        }
-      }
-
-      const contr = app.matchBreakdown.contributionActivity;
-      if (contr === "High" || contr === "Medium") {
-        ossContributorCount += 1;
-      }
-
-      const career = app.matchBreakdown.careerReadiness;
-      if (career === "High" || career === "Medium") {
-        activeRoadmapCount += 1;
-      }
-    }
-  });
+  const {
+    totalScored,
+    totalScoreSum,
+    topCandidatesCount,
+    totalAtsScored,
+    totalAtsSum,
+    atsReadyCount,
+    lowAtsCount,
+    ossContributorCount,
+    activeRoadmapCount
+  } = metrics;
 
   const averageAiMatchScore = totalScored > 0 ? Math.round(totalScoreSum / totalScored) : 0;
   const averageAtsScore = totalAtsScored > 0 ? Math.round(totalAtsSum / totalAtsScored) : 0;

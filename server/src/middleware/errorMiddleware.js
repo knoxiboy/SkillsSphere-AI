@@ -4,7 +4,9 @@ import logger from "../utils/logger.js";
 
 const handleCastErrorDB = (err) => {
   const message = `Invalid ${err.path}: ${err.value}.`;
-  return new AppError(message, 400);
+  const error = new AppError(message, 400);
+  error.isOperational = err.isOperational !== undefined ? err.isOperational : true;
+  return error;
 };
 
 const handleDuplicateFieldsDB = (err) => {
@@ -12,6 +14,8 @@ const handleDuplicateFieldsDB = (err) => {
   // - err.code === 11000
   // - message includes: "dup key: { <field>: \"<value>\" }"
   // - and may also include: err.keyValue === { <field>: <value> }
+
+  let error;
 
   // Preferred: keyValue (works regardless of MongoDB version / message format)
   if (err?.keyValue && typeof err.keyValue === "object") {
@@ -25,23 +29,28 @@ const handleDuplicateFieldsDB = (err) => {
           : String(rawValue).replace(/^['"]|['"]$/g, "");
 
       const message = `Duplicate field value: ${value}. Please use another value!`;
-      return new AppError(message, 400);
+      error = new AppError(message, 400);
     }
   }
 
-  // Fallback: parse message "dup key: { ...: \"VALUE\" }"
-  const raw = err?.errmsg || err?.message || "";
+  if (!error) {
+    // Fallback: parse message "dup key: { ...: \"VALUE\" }"
+    const raw = err?.errmsg || err?.message || "";
 
-  // Capture either a quoted string or a number-like value inside the dup key object.
-  // Example: dup key: { email: "a@b.com" }
-  const match = raw.match(/dup key:\s*\{[^}]*:\s*(?:"([^"]*)"|'([^']*)'|([^\s}]+))\s*\}/i);
+    // Capture either a quoted string or a number-like value inside the dup key object.
+    // Example: dup key: { email: "a@b.com" }
+    const match = raw.match(/dup key:\s*\{\s*([^:\s}]+)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^,\s}]+))/i);
 
-  const value = match
-    ? String(match[1] || match[2] || match[3] || "unknown").trim()
-    : "unknown";
+    const value = match
+      ? String(match[2] || match[3] || match[4] || "unknown").trim()
+      : "unknown";
 
-  const message = `Duplicate field value: ${value}. Please use another value!`;
-  return new AppError(message, 400);
+    const message = `Duplicate field value: ${value}. Please use another value!`;
+    error = new AppError(message, 400);
+  }
+
+  error.isOperational = err.isOperational !== undefined ? err.isOperational : true;
+  return error;
 };
 
 const handleValidationErrorDB = (err) => {
@@ -54,6 +63,7 @@ const handleValidationErrorDB = (err) => {
     const message = "Invalid input data.";
     const error = new AppError(message, 400);
     error.errors = {};
+    error.isOperational = err.isOperational !== undefined ? err.isOperational : true;
     return error;
   }
 
@@ -66,18 +76,17 @@ const handleValidationErrorDB = (err) => {
   const messages = Object.values(rawErrors)
     .map((el) => el?.message)
     .filter((m) => typeof m === "string" && m.trim().length > 0)
-    .map((m) => m.trim())
-    // Normalize punctuation to avoid odd sequences like "...invalid.. other".
-    // Keep the join delimiter consistent instead.
-    .map((m) => m.replace(/[.!?]+\s*$/u, ""));
+    // Keep original field message text intact for clarity.
+    .map((m) => m.trim());
 
   const message = messages.length
-    ? `Invalid input data. ${messages.join(". ")}.`
+    ? `Invalid input data: ${messages.join("; ")}`
     : "Invalid input data.";
 
 
   const error = new AppError(message, 400);
   error.errors = errors; // Attach field-level errors
+  error.isOperational = err.isOperational !== undefined ? err.isOperational : true;
   return error;
 };
 
@@ -172,7 +181,9 @@ const handleAIError = (err) => {
     }
   }
 
-  return new AppError(message, statusCode);
+  const error = new AppError(message, statusCode);
+  error.isOperational = err.isOperational !== undefined ? err.isOperational : true;
+  return error;
 };
 
 
@@ -185,53 +196,58 @@ const globalErrorHandler = (err, req, res, next) => {
   if (error.name === "ValidationError") error = handleValidationErrorDB(error);
   
   // Handle AI errors (Gemini/Google Generative AI + AI-specific Axios errors)
-  // IMPORTANT: Do NOT classify AI errors solely by message text (e.g. "google"),
-  // otherwise non-AI operational errors containing these words get misclassified.
+  // IMPORTANT: Avoid misclassification of non-AI Axios errors.
   //
-  // IMPORTANT FIX: Do NOT classify all Axios errors as AI.
-  // `error.isAxiosError === true` can be true for operational failures to non-AI upstream services.
-  const url = typeof error?.config?.url === "string" ? error.config.url : "";
-  const aiUrlHints = [
-    // Google / Gemini endpoints (best-effort allowlist)
-    "generativelanguage.googleapis.com",
-    "googleapis.com",
-    "/v1beta/",
-    "/v1/",
-    // Some SDKs/clients may use a custom base URL that still includes these hints.
-    "gemini",
-    "generative",
-    // OpenAI (if used elsewhere in the app)
-    "api.openai.com",
-    "chat/completions",
-    "responses",
-  ];
-  const isAiAxiosError = Boolean(
-    error.isAxiosError &&
-      (aiUrlHints.some((hint) => url.toLowerCase().includes(hint)) ||
-        // Secondary check: provider header / type hints if present.
-        (typeof error?.config?.headers === "object" &&
-          (Object.values(error.config.headers)
-            .filter((v) => typeof v === "string")
-            .join(" ")
-            .toLowerCase()
-            .includes("google") ||
-            Object.values(error.config.headers)
-              .filter((v) => typeof v === "string")
-              .join(" ")
-              .toLowerCase()
-              .includes("gemini"))))
-  );
+  // This handler classifies AI failures ONLY when:
+  //  1) The failing request is explicitly tagged with header `x-ai-provider`, or
+  //  2) The error is a strongly-typed AI SDK error (e.g. GoogleGenerativeAI).
+  //
+  // It intentionally does NOT use URL substring heuristics (e.g. googleapis.com / gemini).
 
-  if (
-    isAiAxiosError ||
-    error.type === "invalid_request_error" ||
-    error?.name === "GoogleGenerativeAI" ||
-    error?.provider === "google" ||
-    (typeof error?.status === "number" &&
-      // Gate status-based heuristics behind known AI/provider identifiers.
-      (error?.name === "GoogleGenerativeAI" || error?.provider === "google"))
-  ) {
+  const headers = error?.config?.headers;
+  const headerObj = headers && typeof headers === "object" ? headers : {};
+  const headerKeysLower = Object.keys(headerObj).reduce((acc, k) => {
+    acc[k.toLowerCase()] = headerObj[k];
+    return acc;
+  }, {});
+
+  const aiProvider =
+    headerKeysLower["x-ai-provider"] ??
+    headerKeysLower["x-ai_provider"] ??
+    headerKeysLower["x-ai-client"] ??
+    headerKeysLower["x-ai_client"];
+
+  const normalizedProvider =
+    typeof aiProvider === "string" ? aiProvider.trim().toLowerCase() : "";
+
+  const allowedProviders = new Set([
+    // Current module uses Gemini
+    "gemini",
+    // Reserve common providers for future integrations
+    "openai",
+    "anthropic",
+    "google",
+    "google-generative-ai",
+  ]);
+
+  const isTaggedAiAxiosError =
+    error.isAxiosError && normalizedProvider && allowedProviders.has(normalizedProvider);
+
+  // Also allow strongly-typed AI SDK errors (no URL/message heuristics)
+  const isTypedGeminiSdkError =
+    error?.name === "GoogleGenerativeAI" &&
+    (error.provider === "google" ||
+      error.provider === "gemini" ||
+      error.status !== undefined ||
+      error.errors !== undefined ||
+      error.details !== undefined ||
+      error.response !== undefined ||
+      error.config !== undefined ||
+      error.cause !== undefined);
+
+  if (isTaggedAiAxiosError || isTypedGeminiSdkError) {
     error = handleAIError(error);
+    error.statusCode = error.statusCode ?? 503;
   }
 
 
@@ -253,8 +269,8 @@ const globalErrorHandler = (err, req, res, next) => {
     }
   }
 
-  error.statusCode = error.statusCode || 500;
-  error.status = error.status || "error";
+  error.statusCode = error.statusCode ?? err.statusCode ?? 500;
+  error.status = error.status ?? err.status ?? "error";
 
   if (process.env.NODE_ENV === "development") {
     res.status(error.statusCode).json({

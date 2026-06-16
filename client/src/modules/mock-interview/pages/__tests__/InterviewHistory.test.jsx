@@ -3,7 +3,7 @@ import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import InterviewHistory, { convertToCSV } from "../InterviewHistory";
+import InterviewHistory, { calculateInterviewAnalytics, convertToCSV, filterInterviewSessions } from "../InterviewHistory";
 import { getHistory } from "../../services/interviewService";
 
 vi.mock("../../services/interviewService", () => ({
@@ -84,7 +84,7 @@ describe("InterviewHistory export", () => {
 
     renderHistory();
 
-    await screen.findByText("No interviews yet. Start your first one!");
+    await screen.findByText("No interviews yet.");
     expect(screen.queryByRole("button", { name: /export interview history as csv/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /export interview history as json/i })).not.toBeInTheDocument();
 
@@ -212,5 +212,176 @@ describe("InterviewHistory export", () => {
     expect(csv).toContain('"Backend ""API"", Interview"');
     expect(csv).toContain('"Clear answer\nNeeds more depth"');
     expect(csv).toContain("70,65,80");
+  });
+});
+
+describe("InterviewHistory filtering", () => {
+  const filterSessions = [
+    {
+      _id: "session-1",
+      title: "React Hooks Interview",
+      topic: "frontend",
+      difficulty: "medium",
+      status: "completed",
+      createdAt: "2026-05-01T10:00:00.000Z",
+      overallScore: 84,
+      totalQuestions: 5,
+    },
+    {
+      _id: "session-2",
+      title: "Node API Practice",
+      topic: "backend",
+      difficulty: "hard",
+      status: "failed",
+      createdAt: "2026-05-02T10:00:00.000Z",
+      overallScore: 42,
+      totalQuestions: 4,
+    },
+    {
+      _id: "session-3",
+      title: "System Design Screen",
+      topic: "architecture",
+      difficulty: "easy",
+      status: "in_progress",
+      createdAt: "2026-05-03T10:00:00.000Z",
+      overallScore: 68,
+      totalQuestions: 6,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getHistory.mockResolvedValue({
+      data: { sessions: filterSessions, pagination: { page: 1, pages: 1, total: 3 } },
+    });
+  });
+
+  it("filters interview records by title or topic search", async () => {
+    renderHistory();
+
+    expect(await screen.findByText("React Hooks Interview")).toBeInTheDocument();
+
+    await act(async () => {
+      await userEvent.type(screen.getByLabelText(/search/i), "backend");
+    });
+
+    expect(screen.getByText("Node API Practice")).toBeInTheDocument();
+    expect(screen.queryByText("React Hooks Interview")).not.toBeInTheDocument();
+    expect(screen.queryByText("System Design Screen")).not.toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 3 interviews")).toBeInTheDocument();
+  });
+
+  it("filters by difficulty, status, and score range together", async () => {
+    renderHistory();
+
+    await screen.findByText("React Hooks Interview");
+    await act(async () => {
+      await userEvent.selectOptions(screen.getByLabelText(/difficulty/i), "hard");
+      await userEvent.selectOptions(screen.getByLabelText(/status/i), "failed");
+      await userEvent.type(screen.getByLabelText(/min score/i), "40");
+      await userEvent.type(screen.getByLabelText(/max score/i), "50");
+    });
+
+    expect(screen.getByText("Node API Practice")).toBeInTheDocument();
+    expect(screen.queryByText("React Hooks Interview")).not.toBeInTheDocument();
+    expect(screen.queryByText("System Design Screen")).not.toBeInTheDocument();
+  });
+
+  it("shows an empty filtered state and can reset filters", async () => {
+    renderHistory();
+
+    await screen.findByText("React Hooks Interview");
+    await act(async () => {
+      await userEvent.type(screen.getByLabelText(/search/i), "python");
+    });
+
+    expect(screen.getByText("No matching interviews found.")).toBeInTheDocument();
+    expect(screen.queryByText("React Hooks Interview")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await userEvent.click(screen.getAllByRole("button", { name: /reset filters/i })[0]);
+    });
+
+    expect(screen.getByText("React Hooks Interview")).toBeInTheDocument();
+    expect(screen.getByText("Node API Practice")).toBeInTheDocument();
+    expect(screen.getByText("System Design Screen")).toBeInTheDocument();
+  });
+
+  it("exposes pure filtering behavior for status normalization and scores", () => {
+    const results = filterInterviewSessions(filterSessions, {
+      search: "design",
+      difficulty: "easy",
+      status: "in-progress",
+      minScore: "60",
+      maxScore: "70",
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]._id).toBe("session-3");
+  });
+});
+
+describe("InterviewHistory analytics", () => {
+  it("calculates average score, improvement trend, weak concepts, and weak topics", () => {
+    const analytics = calculateInterviewAnalytics([
+      {
+        _id: "session-1",
+        topic: "react",
+        status: "completed",
+        overallScore: 60,
+        completedAt: "2026-05-01T10:00:00.000Z",
+        weakConcepts: ["hooks", "state"],
+      },
+      {
+        _id: "session-2",
+        topic: "node",
+        status: "completed",
+        overallScore: 80,
+        completedAt: "2026-05-03T10:00:00.000Z",
+        weakConcepts: ["streams"],
+      },
+      {
+        _id: "session-3",
+        topic: "react",
+        status: "completed",
+        overallScore: 70,
+        completedAt: "2026-05-02T10:00:00.000Z",
+        weakConcepts: ["hooks"],
+      },
+      {
+        _id: "session-4",
+        topic: "dsa",
+        status: "in_progress",
+        overallScore: 100,
+        createdAt: "2026-05-04T10:00:00.000Z",
+        weakConcepts: ["graphs"],
+      },
+    ]);
+
+    expect(analytics.averageScore).toBe(70);
+    expect(analytics.completedCount).toBe(3);
+    expect(analytics.trend.map((point) => point.score)).toEqual([60, 70, 80]);
+    expect(analytics.trendDelta).toBe(20);
+    expect(analytics.weakConcepts[0]).toEqual({ label: "hooks", count: 2 });
+    expect(analytics.weakTopics).toEqual([{ label: "react", count: 1 }]);
+  });
+
+  it("normalizes backend analytics summaries for display", () => {
+    const analytics = calculateInterviewAnalytics([], {
+      averageScore: 78,
+      completedCount: 4,
+      improvementTrend: [
+        { topic: "react", score: 72, date: "2026-05-01T10:00:00.000Z" },
+        { topic: "node", score: 84, date: "2026-05-02T10:00:00.000Z" },
+      ],
+      weakConcepts: [{ concept: "closures", count: 3 }],
+      weakTopics: [{ topic: "dsa", count: 2 }],
+    });
+
+    expect(analytics.averageScore).toBe(78);
+    expect(analytics.completedCount).toBe(4);
+    expect(analytics.trendDelta).toBe(12);
+    expect(analytics.weakConcepts).toEqual([{ label: "closures", count: 3 }]);
+    expect(analytics.weakTopics).toEqual([{ label: "dsa", count: 2 }]);
   });
 });

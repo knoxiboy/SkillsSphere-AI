@@ -11,6 +11,7 @@ import {
   sanitizeNotificationMetadata,
   deleteNotificationById,
   deleteAllNotificationsForUser,
+  deleteNotificationsBulk,
 } from "../controller.js";
 import Notification from "../../../database/models/Notification.js";
 import AppError from "../../../utils/AppError.js";
@@ -124,6 +125,26 @@ describe("Notification Controller", () => {
       assert.equal(res.status.mock.calls[0].arguments[0], 200);
       assert.equal(res.json.mock.calls[0].arguments[0].success, true);
     });
+
+    it("should query for system and message types when system filter is requested", async () => {
+      let passedFilters;
+      mock.method(Notification, "find", (filters) => {
+        passedFilters = filters;
+        return {
+          sort: () => ({ skip: () => ({ limit: () => ({ populate: () => [] }) }) }),
+        };
+      });
+      mock.method(Notification, "countDocuments", () => 0);
+
+      req.query = { type: "system" };
+      getNotifications(req, res, next);
+      await flush();
+
+      assert.equal(res.status.mock.calls[0].arguments[0], 200);
+      assert.deepEqual(passedFilters.type, {
+        $in: ["info", "warning", "success", "error", "skill_gap_alert", "system", "message"],
+      });
+    });
   });
 
   describe("getUnreadCount", () => {
@@ -163,6 +184,22 @@ describe("Notification Controller", () => {
       assert.equal(res.status.mock.calls[0].arguments[0], 201);
       assert.equal(res.json.mock.calls[0].arguments[0].success, true);
       assert.deepEqual(res.json.mock.calls[0].arguments[0].data, mockCreated);
+    });
+
+    it("should validate and accept system, message, and application_status types", async () => {
+      for (const t of ["system", "message", "application_status"]) {
+        req.body = { ...validBody(), userId: req.user._id, type: t };
+        const mockCreated = { _id: "n1", ...req.body };
+        mock.method(Notification, "create", () => ({
+          populate: () => mockCreated,
+        }));
+
+        createNotification(req, res, next);
+        await flush();
+
+        assert.equal(res.status.mock.calls[res.status.mock.calls.length - 1].arguments[0], 201);
+        mock.restoreAll();
+      }
     });
 
     it("should throw AppError(403) when userId does not match authenticated user", async () => {
@@ -432,6 +469,63 @@ describe("Notification Controller", () => {
         res.json.mock.calls[0].arguments[0].data.deletedCount,
         3,
       );
+    });
+  });
+
+  describe("deleteNotificationsBulk", () => {
+    it("should respond with 200 and deleted count when valid IDs list is provided", async () => {
+      mock.method(Notification, "deleteMany", () => ({ deletedCount: 2 }));
+
+      req.body = { ids: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"] };
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(res.status.mock.calls[0].arguments[0], 200);
+      assert.equal(res.json.mock.calls[0].arguments[0].success, true);
+      assert.equal(
+        res.json.mock.calls[0].arguments[0].data.deletedCount,
+        2,
+      );
+    });
+
+    it("should throw AppError(400) when ids list is empty", async () => {
+      req.body = { ids: [] };
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should throw AppError(400) when ids parameter is missing", async () => {
+      req.body = {};
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should throw AppError(400) when ids contains an invalid ObjectId", async () => {
+      req.body = { ids: ["not-a-valid-objectid"] };
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
+    });
+
+    it("should throw AppError(400) when ids is a mix of valid and invalid ObjectIds", async () => {
+      req.body = { ids: ["507f1f77bcf86cd799439011", "invalid-id"] };
+      deleteNotificationsBulk(req, res, next);
+      await flush();
+
+      assert.equal(next.mock.calls.length, 1);
+      assert.ok(next.mock.calls[0].arguments[0] instanceof AppError);
+      assert.equal(next.mock.calls[0].arguments[0].statusCode, 400);
     });
   });
 });

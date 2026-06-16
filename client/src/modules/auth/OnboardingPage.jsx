@@ -149,8 +149,13 @@ const OnboardingPage = () => {
       persistAuth({ token, user: updatedUser }, true);
       dispatch(setOAuthData({ token, user: updatedUser, rememberMe: true }));
       
-      success("Profile setup complete!");
-      navigate("/dashboard", { replace: true });
+      if (role === "recruiter" || role === "tutor") {
+        success("Please add your LinkedIn profile and a supporting document to unlock full access.");
+        navigate("/profile", { replace: true });
+      } else {
+        success("Profile setup complete!");
+        navigate("/dashboard", { replace: true });
+      }
     } catch (err) {
       error(err.message);
     } finally {

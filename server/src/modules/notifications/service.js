@@ -49,7 +49,7 @@ export const getUserNotifications = async (userId, queryParams = {}) => {
     } else if (type === "interviews") {
       filters.type = { $in: ["interview"] };
     } else if (type === "system") {
-      filters.type = { $in: ["info", "warning", "success", "error", "skill_gap_alert"] };
+      filters.type = { $in: ["info", "warning", "success", "error", "skill_gap_alert", "system", "message"] };
     } else {
       filters.type = type;
     }
@@ -179,4 +179,18 @@ export const deleteAllNotifications = async (userId) => {
 export const getUnreadNotificationCount = async (userId) => {
   const count = await Notification.countDocuments({ userId, isRead: false });
   return count;
+};
+
+/**
+ * Delete multiple notifications for a user in bulk
+ * @param {string[]} notificationIds - Array of Notification IDs
+ * @param {string} userId - User ID (for authorization)
+ * @returns {Promise<Object>} - Delete result containing deletedCount
+ */
+export const deleteNotificationsBulk = async (notificationIds, userId) => {
+  const result = await Notification.deleteMany({
+    _id: { $in: notificationIds },
+    userId: userId,
+  });
+  return result;
 };

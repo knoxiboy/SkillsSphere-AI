@@ -1,5 +1,5 @@
 import express from "express";
-import { protect, authorizeRoles } from "../../middleware/authMiddleware.js";
+import { protect, authorizeRoles, requireFullAccess } from "../../middleware/authMiddleware.js";
 import { validateBody } from "../../middleware/validation.js";
 import { matchCandidateSchema, inviteCandidateSchema } from "../../validations/recruiterValidation.js";
 import {
@@ -15,8 +15,8 @@ router.use(protect);
 router.use(authorizeRoles("recruiter"));
 
 // Define routes
-router.get("/talent-finder", searchTalent);
-router.post("/match-candidate", validateBody(matchCandidateSchema), matchCandidate);
-router.post("/invite-candidate", validateBody(inviteCandidateSchema), inviteCandidate);
+router.get("/talent-finder", requireFullAccess, searchTalent);
+router.post("/match-candidate", requireFullAccess, validateBody(matchCandidateSchema), matchCandidate);
+router.post("/invite-candidate", requireFullAccess, validateBody(inviteCandidateSchema), inviteCandidate);
 
 export default router;

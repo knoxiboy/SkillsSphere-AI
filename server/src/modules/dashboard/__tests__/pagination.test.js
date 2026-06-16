@@ -1,5 +1,6 @@
 import test, { mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import logger from "../../../utils/logger.js";
 import AnalysisHistory from "../../../database/models/AnalysisHistory.js";
 import CoverLetter from "../../../database/models/CoverLetter.js";
 import Resume from "../../../database/models/Resume.js";
@@ -87,11 +88,12 @@ test("getCoverLetters - returns paginated cover letters successfully", async () 
 
   const result = await invokeController(getCoverLetters, req);
 
+  logger.info("RESULT BODY IS:", result.body);
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.success, true);
   assert.deepEqual(result.body.data, mockLetters);
   assert.equal(result.body.pagination.total, 15);
-  assert.equal(result.body.pagination.totalPages, 2);
+  assert.equal(result.body.pagination.pages, 2);
   assert.equal(result.body.pagination.page, 1);
 });
 

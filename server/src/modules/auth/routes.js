@@ -1,5 +1,15 @@
 import express from "express";
 import { protect } from "../../middleware/authMiddleware.js";
+import { validateBody } from "../../middleware/validation.js";
+import {
+  registerSchema,
+  verifyEmailSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  resendOtpSchema,
+  loginSchema,
+  googleAuthSchema,
+} from "../../validations/auth.validation.js";
 
 import {
   authRateLimiter,
@@ -74,11 +84,11 @@ router.get("/google/callback", googleOAuthCallback);
  *       201:
  *         description: User registered
  */
-router.post("/register", authRateLimiter, register);
-router.post("/verify-email", otpRateLimiter, authRateLimiter, verifyEmail);
-router.post("/forgot-password", authRateLimiter, forgotPassword);
-router.post("/reset-password", authRateLimiter, resetPassword);
-router.post("/resend-otp", authRateLimiter, resendOTP);
+router.post("/register", authRateLimiter, validateBody(registerSchema), register);
+router.post("/verify-email", otpRateLimiter, authRateLimiter, validateBody(verifyEmailSchema), verifyEmail);
+router.post("/forgot-password", authRateLimiter, validateBody(forgotPasswordSchema), forgotPassword);
+router.post("/reset-password", authRateLimiter, validateBody(resetPasswordSchema), resetPassword);
+router.post("/resend-otp", authRateLimiter, validateBody(resendOtpSchema), resendOTP);
 /**
  * @openapi
  * /api/auth/login:
@@ -103,13 +113,13 @@ router.post("/resend-otp", authRateLimiter, resendOTP);
  *       200:
  *         description: Login successful
  */
-router.post("/login", authRateLimiter, login);
+router.post("/login", authRateLimiter, validateBody(loginSchema), login);
 
 // 🚪 Logout
 router.post("/logout", protect, logout);
 
 // 🔐 Google Login
-router.post("/google", googleLogin);
+router.post("/google", validateBody(googleAuthSchema), googleLogin);
 
 // Exchange one-time auth code for JWT
 router.post("/exchange-code", authRateLimiter, exchangeOAuthCode);

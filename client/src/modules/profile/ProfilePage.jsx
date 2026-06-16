@@ -8,7 +8,7 @@ import {
   User, Mail, Shield, Calendar, Clock, Pencil, X, Check,
   ChevronLeft, BadgeCheck, AlertCircle, Trash2, LogOut,
   Info, Lock, Sparkles, Activity, Camera, Upload, MapPin,
-  Briefcase, Globe, ExternalLink, Settings
+  Briefcase, Globe, ExternalLink, Settings, Link2, FileText
 } from "lucide-react";
 import Input from "../../shared/components/Input";
 import Button from "../../shared/components/Button";
@@ -159,8 +159,7 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarS
   return (
     <div className="flex w-full flex-col items-center gap-3">
       <div className="relative group">
-        <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${roleConfig.avatar} flex items-center justify-center text-white text-3xl font-bold border-4 border-white dark:border-slate-900 shadow-xl overflow-hidden select-none`}
-          style={{ boxShadow: `0 4px 24px ${roleConfig.glow}` }}>
+        <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${roleConfig.avatar} flex items-center justify-center text-white text-3xl font-bold border-4 border-white dark:border-slate-900 shadow-xl overflow-hidden select-none shadow-[0_4px_24px_var(--tw-glow)]`} style={{ '--tw-glow': roleConfig.glow }}>
           {displayPic ? (
             <img src={displayPic} alt={`${user.name || "User"} profile avatar`} className="w-full h-full object-cover" />
           ) : (
@@ -247,6 +246,8 @@ const ProfilePage = () => {
     name: user?.name || "",
     company: user?.company || "",
     companyWebsite: user?.companyWebsite || "",
+    linkedinUrl: user?.linkedinUrl || "",
+    credentialUrl: user?.credentialUrl || "",
   });
   const [errors, setErrors] = useState({});
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -320,6 +321,8 @@ const ProfilePage = () => {
       name: user?.name || "",
       company: user?.company || "",
       companyWebsite: user?.companyWebsite || "",
+      linkedinUrl: user?.linkedinUrl || "",
+      credentialUrl: user?.credentialUrl || "",
     });
     setErrors({});
     setSaveSuccess(false);
@@ -332,6 +335,8 @@ const ProfilePage = () => {
       name: user?.name || "",
       company: user?.company || "",
       companyWebsite: user?.companyWebsite || "",
+      linkedinUrl: user?.linkedinUrl || "",
+      credentialUrl: user?.credentialUrl || "",
     });
     setErrors({});
     setApiError("");
@@ -339,9 +344,10 @@ const ProfilePage = () => {
   };
 
   const handleChange = (e) => {
-    const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: value }));
-    if (errors[id]) setErrors((prev) => ({ ...prev, [id]: "" }));
+    const key = e.target.name || e.target.id;
+    const { value } = e.target;
+    setFormData((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: "" }));
   };
 
   const handleSave = async (e) => {
@@ -355,9 +361,16 @@ const ProfilePage = () => {
     try {
       setApiError("");
       const payload = { name: trimmed };
+      if (user.role === "recruiter" || user.role === "tutor") {
+        // Always include these fields so the backend receives them.
+        // Trimmed empty string means user left the field blank — the backend
+        // can then decide whether to accept that or keep the old value.
+        payload.linkedinUrl  = formData.linkedinUrl.trim();
+        payload.credentialUrl = formData.credentialUrl.trim();
+      }
       if (user.role === "recruiter") {
-        payload.company = formData.company ? formData.company.trim() : "";
-        payload.companyWebsite = formData.companyWebsite ? formData.companyWebsite.trim() : "";
+        payload.company        = formData.company.trim();
+        payload.companyWebsite = formData.companyWebsite.trim();
       }
       const response = await updateProfile(payload, token);
       persistUser(response.user);
@@ -395,6 +408,10 @@ const ProfilePage = () => {
   }
 
   const isVerified = user.isVerified ?? user.isEmailVerified;
+  const accountStatus =
+    (user.role === "recruiter" || user.role === "tutor")
+      ? user.accessLevel
+      : (isVerified ? "active" : "pending");
   const daysSinceJoined = user.createdAt ? Math.floor((Date.now() - new Date(user.createdAt).getTime()) / 86400000) : 0;
 
   const verificationBadge = isVerified ? (
@@ -410,7 +427,7 @@ const ProfilePage = () => {
   return (
     <div className="min-h-screen transition-colors duration-300 relative bg-gradient-to-br from-[#f0eeff] via-[#f7f9fc] to-[#edfdf5] dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 pt-24">
       <Navbar />
-      <div className="relative" style={{ zIndex: 2 }}>
+      <div className="relative z-[2]">
         
         {/* ── Cover Banner ── */}
         <div className="relative w-full h-44 sm:h-36 overflow-hidden">
@@ -419,9 +436,9 @@ const ProfilePage = () => {
           <div className="absolute bottom-0 left-1/4 w-24 h-24 rounded-full bg-white/5" />
 
           {/* Animated Glassy Bubbles inside banner */}
-          <div className="absolute w-20 h-20 rounded-full" style={{ top: '10%', left: '8%', background: 'linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.08))', border: '1.5px solid rgba(255,255,255,0.3)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 16px rgba(0,0,0,0.1)', backdropFilter: 'blur(8px)' }} />
-          <div className="absolute w-12 h-12 rounded-full" style={{ bottom: '15%', left: '30%', background: 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.06))', border: '1.5px solid rgba(255,255,255,0.25)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 12px rgba(0,0,0,0.08)', backdropFilter: 'blur(6px)' }} />
-          <div className="absolute w-16 h-16 rounded-full" style={{ top: '15%', right: '25%', background: 'linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.07))', border: '1.5px solid rgba(255,255,255,0.28)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.38), 0 4px 14px rgba(0,0,0,0.09)', backdropFilter: 'blur(7px)' }} />
+          <div className="absolute w-20 h-20 rounded-full top-[10%] left-[8%] bg-gradient-to-br from-white/25 to-white/10 border-[1.5px] border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_16px_rgba(0,0,0,0.1)] backdrop-blur-sm" />
+          <div className="absolute w-12 h-12 rounded-full bottom-[15%] left-[30%] bg-gradient-to-br from-white/20 to-white/5 border-[1.5px] border-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_12px_rgba(0,0,0,0.08)] backdrop-blur-[6px]" />
+          <div className="absolute w-16 h-16 rounded-full top-[15%] right-[25%] bg-gradient-to-br from-white/20 to-white/10 border-[1.5px] border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),0_4px_14px_rgba(0,0,0,0.09)] backdrop-blur-[7px]" />
         </div>
 
         {/* ── Main Layout Grid ── */}
@@ -459,7 +476,7 @@ const ProfilePage = () => {
 
               {/* Contact Info */}
               <div className="px-5 py-4">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ background: 'linear-gradient(135deg,#7C3AED,#059669)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest mb-3 bg-gradient-to-br from-[#7C3AED] to-[#059669] bg-clip-text text-transparent">
                   Contact Info
                 </h3>
                 <div className="flex flex-col gap-2.5">
@@ -483,7 +500,7 @@ const ProfilePage = () => {
 
               {/* Activity Metrics */}
               <div className="px-5 py-4">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ background: 'linear-gradient(135deg,#7C3AED,#059669)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest mb-3 bg-gradient-to-br from-[#7C3AED] to-[#059669] bg-clip-text text-transparent">
                   Activity
                 </h3>
                 <div className="grid grid-cols-2 gap-2.5">
@@ -492,7 +509,13 @@ const ProfilePage = () => {
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Days Active</div>
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2.5 text-center border border-slate-100 dark:border-white/5">
-                    <div className={`text-sm font-bold ${isVerified ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>{isVerified ? "Active" : "Pending"}</div>
+                    <div className={`text-sm font-bold ${
+                      accountStatus === "pending"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}>
+                      {accountStatus === "pending" ? "Pending" : "Active"}
+                    </div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Status</div>
                   </div>
                 </div>
@@ -502,6 +525,19 @@ const ProfilePage = () => {
 
           {/* Right Column */}
           <div className="flex flex-col gap-5 min-w-0">
+
+            {/* Pending Access Banner */}
+            {user.accessLevel === "pending" && (user.role === "recruiter" || user.role === "tutor") && (
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 shadow-sm">
+                <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">Profile Verification Pending</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Please add your LinkedIn profile and a supporting document (e.g. offer letter, degree certificate) to unlock full access to {user.role === "recruiter" ? "talent search and candidate matching" : "classroom creation"}.
+                  </p>
+                </div>
+              </div>
+            )}
             
             {/* Edit Profile Header */}
             <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
@@ -562,7 +598,7 @@ const ProfilePage = () => {
             {/* ═══ Section 1: Basic Information ═══ */}
             {activeTab === "info" && (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm p-6">
-              <h3 className="text-xs font-bold uppercase tracking-widest mb-5" style={{ background: 'linear-gradient(135deg,#7C3AED,#059669)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+              <h3 className="text-xs font-bold uppercase tracking-widest mb-5 bg-gradient-to-br from-[#7C3AED] to-[#059669] bg-clip-text text-transparent">
                 Basic Information
               </h3>
               {isEditing ? (
@@ -577,8 +613,16 @@ const ProfilePage = () => {
                   </div>
                   {user.role === "recruiter" && (
                     <>
-                      <Input id="company" label="Company Name" placeholder="Enter company name" value={formData.company} onChange={handleChange} leftIcon={<Briefcase size={16} />} />
-                      <Input id="companyWebsite" label="Company Website" placeholder="e.g. www.mycompany.com" value={formData.companyWebsite} onChange={handleChange} leftIcon={<Globe size={16} />} helperText="Link to your company's official website." />
+                      <Input id="company" name="company" label="Company Name" placeholder="Enter company name" value={formData.company} onChange={handleChange} leftIcon={<Briefcase size={16} />} />
+                      <Input id="companyWebsite" name="companyWebsite" label="Company Website" placeholder="e.g. www.mycompany.com" value={formData.companyWebsite} onChange={handleChange} leftIcon={<Globe size={16} />} helperText="Link to your company's official website." />
+                      <Input id="linkedinUrl" name="linkedinUrl" label="LinkedIn Company Page" placeholder="https://linkedin.com/company/..." value={formData.linkedinUrl} onChange={handleChange} leftIcon={<Link2 size={16} />} />
+                      <Input id="credentialUrl" name="credentialUrl" label="Proof Document Link" placeholder="https://drive.google.com/..." value={formData.credentialUrl} onChange={handleChange} leftIcon={<FileText size={16} />} helperText="Link to an offer letter, ID card, or company proof (e.g. Google Drive link)." />
+                    </>
+                  )}
+                  {user.role === "tutor" && (
+                    <>
+                      <Input id="linkedinUrl" name="linkedinUrl" label="LinkedIn Profile" placeholder="https://linkedin.com/in/..." value={formData.linkedinUrl} onChange={handleChange} leftIcon={<Link2 size={16} />} />
+                      <Input id="credentialUrl" name="credentialUrl" label="Qualification Proof" placeholder="https://drive.google.com/..." value={formData.credentialUrl} onChange={handleChange} leftIcon={<FileText size={16} />} helperText="Link to your degree/certification (e.g. Google Drive link)." />
                     </>
                   )}
                 </form>
@@ -597,6 +641,30 @@ const ProfilePage = () => {
                         { icon: <Globe size={15} />, label: "Company Website", value: user.companyWebsite ? (
                           <a href={user.companyWebsite} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
                             {user.companyWebsite} <ExternalLink size={12} />
+                          </a>
+                        ) : <span className="text-slate-400 italic">Not set</span> },
+                        { icon: <Link2 size={15} />, label: "LinkedIn Company Page", value: user.linkedinUrl ? (
+                          <a href={user.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
+                            {user.linkedinUrl} <ExternalLink size={12} />
+                          </a>
+                        ) : <span className="text-slate-400 italic">Not set</span> },
+                        { icon: <FileText size={15} />, label: "Proof Document", value: user.credentialUrl ? (
+                          <a href={user.credentialUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
+                            {user.credentialUrl} <ExternalLink size={12} />
+                          </a>
+                        ) : <span className="text-slate-400 italic">Not set</span> }
+                      );
+                    }
+                    if (user.role === "tutor") {
+                      infoRows.push(
+                        { icon: <Link2 size={15} />, label: "LinkedIn Profile", value: user.linkedinUrl ? (
+                          <a href={user.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
+                            {user.linkedinUrl} <ExternalLink size={12} />
+                          </a>
+                        ) : <span className="text-slate-400 italic">Not set</span> },
+                        { icon: <FileText size={15} />, label: "Qualification Proof", value: user.credentialUrl ? (
+                          <a href={user.credentialUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
+                            {user.credentialUrl} <ExternalLink size={12} />
                           </a>
                         ) : <span className="text-slate-400 italic">Not set</span> }
                       );
@@ -622,7 +690,7 @@ const ProfilePage = () => {
 
             {activeTab === "security" && (
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm p-6">
-                <h3 className="text-xs font-bold uppercase tracking-widest mb-5" style={{ background: 'linear-gradient(135deg,#7C3AED,#059669)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+                <h3 className="text-xs font-bold uppercase tracking-widest mb-5 bg-gradient-to-br from-[#7C3AED] to-[#059669] bg-clip-text text-transparent">
                   Password & Access
                 </h3>
                 {user.provider === "google" ? (
@@ -642,7 +710,7 @@ const ProfilePage = () => {
             {activeTab === "account" && (
               <div className="flex flex-col gap-5 min-w-0">
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm p-6">
-                  <h3 className="text-xs font-bold uppercase tracking-widest mb-5" style={{ background: 'linear-gradient(135deg,#7C3AED,#059669)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
+                  <h3 className="text-xs font-bold uppercase tracking-widest mb-5 bg-gradient-to-br from-[#7C3AED] to-[#059669] bg-clip-text text-transparent">
                     Account Details
                   </h3>
                   <div className="flex flex-col divide-y divide-slate-100 dark:divide-white/5">

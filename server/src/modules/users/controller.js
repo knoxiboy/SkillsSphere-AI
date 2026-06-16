@@ -21,10 +21,11 @@ import logger from "../../utils/logger.js";
 export const DEFAULT_USER_PREFERENCES = {
   notifications: {
     emailNotifications: true,
+    inAppNotifications: true,
     interviewReminders: true,
-    jobAlerts: true,
-    applicationStatusUpdates: true,
-    platformUpdates: false,
+    jobUpdates: true,
+    resumeAnalysis: true,
+    systemAlerts: true,
   },
   emailFrequency: "weekly",
   privacy: {
@@ -47,6 +48,23 @@ const isPlainObject = (value) =>
 const toPlainPreferences = (preferences = {}) =>
   typeof preferences?.toObject === "function" ? preferences.toObject() : preferences || {};
 
+const normalizeNotificationPreferences = (notifications = {}) => {
+  if (!isPlainObject(notifications)) return {};
+
+  const normalized = {
+    emailNotifications: notifications.emailNotifications,
+    inAppNotifications: notifications.inAppNotifications,
+    interviewReminders: notifications.interviewReminders,
+    jobUpdates: notifications.jobUpdates ?? notifications.jobAlerts,
+    resumeAnalysis: notifications.resumeAnalysis,
+    systemAlerts: notifications.systemAlerts ?? notifications.platformUpdates,
+  };
+
+  return Object.fromEntries(
+    Object.entries(normalized).filter(([, value]) => value !== undefined),
+  );
+};
+
 export const getDefaultPreferences = () => ({
   notifications: { ...DEFAULT_USER_PREFERENCES.notifications },
   emailFrequency: DEFAULT_USER_PREFERENCES.emailFrequency,
@@ -59,7 +77,7 @@ export const mergePreferencesWithDefaults = (preferences = {}) => {
   return {
     notifications: {
       ...DEFAULT_USER_PREFERENCES.notifications,
-      ...(isPlainObject(plain.notifications) ? plain.notifications : {}),
+      ...normalizeNotificationPreferences(plain.notifications),
     },
     emailFrequency: plain.emailFrequency || DEFAULT_USER_PREFERENCES.emailFrequency,
     privacy: {
@@ -167,11 +185,18 @@ export const updatePreferences = asyncHandler(async (req, res, next) => {
     return next(new AppError("User not found", 404));
   }
 
-  let preferences;
-  try {
-    preferences = validateAndMergePreferences(user.preferences, req.body);
-  } catch (error) {
-    return next(error);
+  let preferences = mergePreferencesWithDefaults(user.preferences);
+  
+  // Since validateBody(updatePreferencesSchema) already stripped unknown keys and validated types,
+  // we can safely merge req.body.
+  if (req.body.notifications) {
+    preferences.notifications = { ...preferences.notifications, ...req.body.notifications };
+  }
+  if (req.body.emailFrequency) {
+    preferences.emailFrequency = req.body.emailFrequency;
+  }
+  if (req.body.privacy) {
+    preferences.privacy = { ...preferences.privacy, ...req.body.privacy };
   }
 
   user.preferences = preferences;
@@ -192,21 +217,15 @@ export const updatePreferences = asyncHandler(async (req, res, next) => {
 export const onboardUser = asyncHandler(async (req, res, next) => {
   const { name, role } = req.body;
 
-  if (!name || name.trim().length < 2) {
-    return next(new AppError("Please provide a valid name (at least 2 characters)", 400));
-  }
-
-  const allowedRoles = ["student", "tutor", "recruiter"];
-  if (!role || !allowedRoles.includes(role)) {
-    return next(new AppError("Please select a valid role", 400));
-  }
+  const accessLevel = (role === "recruiter" || role === "tutor") ? "pending" : "full";
 
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
     { 
       name: name.trim(),
       role: role,
-      isOnboarded: true 
+      isOnboarded: true,
+      accessLevel,
     },
     { new: true, runValidators: true }
   ).select("-password -__v");
@@ -228,13 +247,27 @@ export const onboardUser = asyncHandler(async (req, res, next) => {
  * @access  Private
  */
 export const updateProfile = asyncHandler(async (req, res, next) => {
-  const { name, company, companyWebsite } = req.body;
-
-  if (!name || name.trim().length < 2) {
-    return next(new AppError("Please provide a valid name (at least 2 characters)", 400));
+  const { name, company, companyWebsite, linkedinUrl, credentialUrl } = req.body;
+  const updateData = {};
+  if (name !== undefined) {
+    updateData.name = name.trim();
   }
 
-  const updateData = { name: name.trim() };
+  // Handle linkedinUrl and credentialUrl for recruiter and tutor roles
+  if (req.user.role === "recruiter" || req.user.role === "tutor") {
+    if (linkedinUrl !== undefined) {
+      updateData.linkedinUrl =
+        typeof linkedinUrl === "string" && linkedinUrl.trim()
+          ? linkedinUrl.trim()
+          : null;
+    }
+    if (credentialUrl !== undefined) {
+      updateData.credentialUrl =
+        typeof credentialUrl === "string" && credentialUrl.trim()
+          ? credentialUrl.trim()
+          : null;
+    }
+  }
 
   if (req.user.role === "recruiter") {
     if (company !== undefined) {
@@ -249,14 +282,45 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
     }
   }
 
-  const updatedUser = await User.findByIdAndUpdate(
-    req.user._id,
-    updateData,
-    { new: true, runValidators: true }
-  ).select("-password -__v");
+const updatedUser = await User.findByIdAndUpdate(
+  req.user._id,
+  { $set: updateData },
+  { new: true, runValidators: true }
+).select("-password -__v");
 
   if (!updatedUser) {
     return next(new AppError("User not found", 404));
+  }
+
+  // Recalculate verification status for recruiter and tutor roles
+  if (updatedUser.role === "recruiter" || updatedUser.role === "tutor") {
+    let shouldBeVerified = false;
+
+    if (updatedUser.role === "recruiter") {
+      // recruiter: linkedinUrl non-empty AND (company OR credentialUrl) non-empty
+      shouldBeVerified = !!updatedUser.linkedinUrl &&
+        (!!updatedUser.company || !!updatedUser.credentialUrl);
+    } else if (updatedUser.role === "tutor") {
+      // tutor: linkedinUrl non-empty AND credentialUrl non-empty
+      shouldBeVerified = !!updatedUser.linkedinUrl && !!updatedUser.credentialUrl;
+    }
+
+    const targetAccessLevel = shouldBeVerified ? "full" : "pending";
+
+    // Update accessLevel if it changed
+    if (updatedUser.accessLevel !== targetAccessLevel) {
+      const finalUser = await User.findByIdAndUpdate(
+        req.user._id,
+        { accessLevel: targetAccessLevel },
+        { new: true, runValidators: true }
+      ).select("-password -__v");
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile updated successfully",
+        user: finalUser,
+      });
+    }
   }
 
   res.status(200).json({

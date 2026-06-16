@@ -1,5 +1,6 @@
 import asyncHandler from "../../utils/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
+import mongoose from "mongoose";
 import {
   createNotification as createNotificationService,
   getUserNotifications,
@@ -9,6 +10,7 @@ import {
   deleteNotification,
   deleteAllNotifications,
   getUnreadNotificationCount,
+  deleteNotificationsBulk as deleteNotificationsBulkService,
 } from "./service.js";
 
 const decodeActionUrl = (value) => {
@@ -32,6 +34,7 @@ export const isSafeNotificationActionUrl = (value) => {
     return false;
   }
 
+  // eslint-disable-next-line no-control-regex
   if (/[\s\\\u0000-\u001F\u007F]/.test(value)) {
     return false;
   }
@@ -41,6 +44,7 @@ export const isSafeNotificationActionUrl = (value) => {
     return false;
   }
 
+  // eslint-disable-next-line no-control-regex
   if (/[\s\\\u0000-\u001F\u007F]/.test(decoded)) {
     return false;
   }
@@ -107,6 +111,7 @@ export const getNotifications = asyncHandler(async (req, res) => {
       "jobs",
       "interviews",
       "system",
+      "message",
       "info",
       "warning",
       "success",
@@ -116,6 +121,7 @@ export const getNotifications = asyncHandler(async (req, res) => {
       "application",
       "new_application",
       "skill_gap_alert",
+      "application_status",
     ];
     if (!validTypes.includes(type)) {
       throw new AppError(`Type filter must be one of: ${validTypes.join(", ")}`, 400);
@@ -176,6 +182,9 @@ export const createNotification = asyncHandler(async (req, res) => {
       "application",
       "new_application",
       "skill_gap_alert",
+      "application_status",
+      "system",
+      "message",
     ];
     if (!validTypes.includes(type)) {
       validationErrors.type = `Type must be one of: ${validTypes.join(", ")}`;
@@ -290,5 +299,32 @@ export const deleteAllNotificationsForUser = asyncHandler(async (req, res) => {
     success: true,
     data: { deletedCount: result.deletedCount },
     message: "All notifications deleted successfully",
+  });
+});
+
+/**
+ * @desc    Delete multiple notifications for user in bulk
+ * @route   DELETE /api/notifications/bulk
+ * @access  Private
+ */
+export const deleteNotificationsBulk = asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+  const userId = req.user._id;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    throw new AppError("Invalid or empty notification IDs list", 400);
+  }
+
+  const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidIds.length > 0) {
+    throw new AppError("Invalid notification ID format", 400);
+  }
+
+  const result = await deleteNotificationsBulkService(ids, userId.toString());
+
+  res.status(200).json({
+    success: true,
+    data: { deletedCount: result.deletedCount },
+    message: `${result.deletedCount} notifications deleted successfully`,
   });
 });

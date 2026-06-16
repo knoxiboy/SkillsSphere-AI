@@ -2,6 +2,7 @@ import Resume from "../../database/models/Resume.js";
 import CoverLetter from "../../database/models/CoverLetter.js";
 import { buildCoverLetterPrompt } from "../../utils/coverLetterPromptBuilder.js";
 import { generateCoverLetter } from "../../utils/geminiService.js";
+import { COVER_LETTER_LIMIT } from "../../validations/coverLetterValidation.js";
 
 import logger from "../../utils/logger.js";
 
@@ -31,15 +32,23 @@ export const generateCoverLetterForResume = async (req, res, next) => {
 
     // Security check: ensure the user owns the resume
     if (resume.user.toString() !== userId.toString()) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Unauthorized access to this resume." 
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized access to this resume."
+      });
+    }
+
+    const coverLetterCount = await CoverLetter.countDocuments({ user: userId });
+    if (coverLetterCount >= COVER_LETTER_LIMIT) {
+      return res.status(400).json({
+        success: false,
+        message: `Maximum limit of ${COVER_LETTER_LIMIT} cover letters reached. Please delete an existing one to generate a new one.`,
       });
     }
 
     // Build the dynamic prompt using the parsed resume data
-    logger.log("Resume:", resume);
-    logger.log("JD:", jobDescription);
+    logger.info("Resume:", resume);
+    logger.info("JD:", jobDescription);
     const prompt = buildCoverLetterPrompt({
       resumeData: resume,
       analysisData: {
@@ -51,12 +60,12 @@ export const generateCoverLetterForResume = async (req, res, next) => {
       language
     });
 
-    logger.log("Generated Prompt:", prompt);
+    logger.info("Generated Prompt:", prompt);
 
     // Generate the cover letter using the Gemini service
     const aiResult = await generateCoverLetter(prompt);
 
-    logger.log("Gemini Response:", aiResult);
+    logger.info("Gemini Response:", aiResult);
 
     if (!aiResult.success) {
       return res.status(500).json({ 

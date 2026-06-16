@@ -80,6 +80,19 @@ export const authorizeRoles = (...roles) => {
 };
 
 /**
+ * Middleware to require full access level for verified recruiter/tutor accounts.
+ * Returns 403 if the user's accessLevel is not "full".
+ */
+export const requireFullAccess = (req, res, next) => {
+  if (req.user.accessLevel === "full") return next();
+  return res.status(403).json({
+    success: false,
+    message:
+      "Please complete your profile (LinkedIn + supporting document) to access this feature. Your account is pending verification.",
+  });
+};
+
+/**
  * Verify a JWT token and return the matching User document.
  * Used by Socket.io io.use() middleware to authenticate WebSocket connections.
  * @param {string} token - JWT string from the socket handshake

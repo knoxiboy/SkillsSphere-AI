@@ -74,7 +74,7 @@ describe("errorMiddleware AI detection", () => {
     err.config = {
       url: "https://non-ai-upstream.example.com/orders/v1/create",
       headers: {
-        Authorization: "Bearer some-non-google-token",
+        Authorization: "Bearer some-non-matching-token",
       },
     };
 
@@ -121,6 +121,43 @@ describe("errorMiddleware AI detection", () => {
       /AI request was invalid|AI Authentication failed|AI access forbidden/i
     );
 
+  });
+
+  test("falls back to 503 if handleAIError does not map to a specific statusCode", async () => {
+    process.env.NODE_ENV = "production";
+
+    const err = new Error("Unrecognized error message from generative AI model");
+    err.isOperational = true;
+    err.code = undefined;
+    err.isAxiosError = false;
+    err.name = "GoogleGenerativeAI";
+    err.provider = "google";
+
+    const req = { method: "GET", originalUrl: "/api/test" };
+    const res = makeRes();
+
+    globalErrorHandler(err, req, res, next);
+
+    assert.equal(res.statusCode, 503);
+    assert.match(res.payload.message, /AI service is currently unavailable/i);
+  });
+
+  test("does not classify errors named GoogleGenerativeAI as AI if they lack SDK fields", async () => {
+    process.env.NODE_ENV = "production";
+
+    const err = new Error("Operational failure on standard subsystem");
+    err.isOperational = true;
+    err.statusCode = 400;
+    err.name = "GoogleGenerativeAI";
+
+    const req = { method: "GET", originalUrl: "/api/test" };
+    const res = makeRes();
+
+    globalErrorHandler(err, req, res, next);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.payload.message, "Operational failure on standard subsystem");
+    assert.ok(!res.payload.message.includes("AI "));
   });
 });
 

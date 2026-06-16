@@ -31,8 +31,18 @@ export const cascadeDeleteUser = async (userId) => {
     return;
   }
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const client = mongoose.connection?.client;
+  const topologyType = client?.topology?.description?.type;
+  const useTransaction = topologyType && (
+    topologyType.includes("ReplicaSet") ||
+    topologyType === "Sharded" ||
+    (client?.topology?.description?.servers && client.topology.description.servers.size > 1)
+  );
+
+  const session = useTransaction ? await mongoose.startSession() : null;
+  if (session) {
+    session.startTransaction();
+  }
 
   let resumes = [];
   let interviewSessions = [];
@@ -65,6 +75,16 @@ export const cascadeDeleteUser = async (userId) => {
     await Notification.deleteMany({ userId }, { session });
     await MatchResult.deleteMany({ user: userId }, { session });
     await LearningProgress.deleteMany({ user: userId }, { session });
+    await LearningProgress.updateMany(
+  { tutorsTracking: userId },
+  { $pull: { tutorsTracking: userId } },
+  { session }
+);
+await LearningProgress.updateMany(
+  { recruitersTracking: userId },
+  { $pull: { recruitersTracking: userId } },
+  { session }
+);
     await JobApplication.deleteMany({ applicant: userId }, { session });
     await CoverLetter.deleteMany({ user: userId }, { session });
     await AnalysisHistory.deleteMany({ user: userId }, { session });
@@ -120,13 +140,19 @@ export const cascadeDeleteUser = async (userId) => {
     // 6. Delete User document itself
     await User.findByIdAndDelete(userId, { session });
 
-    await session.commitTransaction();
+    if (session) {
+      await session.commitTransaction();
+    }
   } catch (error) {
-    await session.abortTransaction();
+    if (session) {
+      await session.abortTransaction();
+    }
     logger.error("Transaction aborted in cascadeDeleteUser:", error);
     throw error;
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 
   // 1. Delete profile picture from Cloudinary, or from disk for legacy local avatars.

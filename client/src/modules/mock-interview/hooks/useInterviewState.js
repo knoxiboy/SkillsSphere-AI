@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { submitAnswer, completeInterview } from "../services/interviewService";
+import { submitAnswer, completeInterview, toggleQuestionBookmark } from "../services/interviewService";
 import { apiRequest } from "../../../services/apiClient";
 import {
   saveInterviewSession,
   loadInterviewSession,
-  clearInterviewSession
+  clearInterviewSession,
+  saveInterviewAnswerDraft,
+  loadInterviewAnswerDraft,
+  clearInterviewAnswerDraft,
 } from "../../../utils/interviewSessionStorage";
 import { analyzeText, debounce } from "../utils/sentiment";
+import { getToken } from "../../../utils/authToken";
 import logger from "../../../utils/logger";
 
-const TOKEN_KEY = "skillssphere.auth.token";
 const REQUEST_TIMEOUT_MS = 20000;
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -85,6 +88,7 @@ export const useInterviewState = (sessionId, isObserver) => {
   const [mediaWarning, setMediaWarning] = useState(null);
   const [recoveryMessage, setRecoveryMessage] = useState(null);
   const [failedAction, setFailedAction] = useState(null);
+  const [bookmarking, setBookmarking] = useState(false);
 
   const debouncedAnalyze = useRef(
     debounce((text) => {
@@ -147,7 +151,7 @@ export const useInterviewState = (sessionId, isObserver) => {
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   // Load session from API or localStorage rehydration
@@ -156,8 +160,7 @@ export const useInterviewState = (sessionId, isObserver) => {
 
     const fetchSession = async () => {
       try {
-        const token =
-          localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+        const token = getToken();
         setRequestStatus("Loading interview session...");
         const res = await retryRecoverable(
           () =>
@@ -186,23 +189,39 @@ export const useInterviewState = (sessionId, isObserver) => {
           idx = unansweredIdx >= 0 ? unansweredIdx : 0;
         }
 
-        setCurrentIndex(idx);
-        setCurrentQuestion({
+        const question = {
           questionText: data.answers[idx]?.questionText,
           questionId: data.answers[idx]?.questionId,
+          bookmarked: Boolean(data.answers[idx]?.bookmarked),
+        };
+        const savedDraft = loadInterviewAnswerDraft({
+          sessionId,
+          currentIndex: idx,
+          questionId: question.questionId,
         });
+        const restoredAnswer =
+          savedSession?.answer ||
+          savedSession?.messages?.at(-1)?.content ||
+          savedDraft?.answer ||
+          "";
+
+        if (savedDraft?.answer && !savedSession?.answer) {
+          setAnswer(savedDraft.answer);
+          setRecoveryMessage("Restored your saved answer draft.");
+          setTimeout(() => setRecoveryMessage(null), 3000);
+        }
+
+        setCurrentIndex(idx);
+        setCurrentQuestion(question);
         setIsLastQuestion(idx === data.answers.length - 1);
         
         saveInterviewSession({
           sessionId,
           currentIndex: idx,
-          answer: savedSession?.answer || "",
+          answer: restoredAnswer,
           elapsedTime: savedSession?.elapsedTime || 0,
           uploadStatus: savedSession?.uploadStatus || "idle",
-          currentQuestion: {
-            questionText: data.answers[idx]?.questionText,
-            questionId: data.answers[idx]?.questionId,
-          },
+          currentQuestion: question,
           messages: savedSession?.messages || [],
         });
       } catch (err) {
@@ -221,6 +240,11 @@ export const useInterviewState = (sessionId, isObserver) => {
   }, [sessionId]);
 
   const handleEvaluationResult = useCallback((data, textareaRef) => {
+    clearInterviewAnswerDraft({
+      sessionId,
+      currentIndex,
+      questionId: currentQuestion?.questionId,
+    });
     setLastScores(data.scores);
     setShowScores(true);
     setAnswer("");
@@ -233,14 +257,89 @@ export const useInterviewState = (sessionId, isObserver) => {
       setIsLastQuestion(true);
     } else if (data.nextQuestion) {
       setTimeout(() => {
+        const savedDraft = loadInterviewAnswerDraft({
+          sessionId,
+          currentIndex: data.nextQuestion.index,
+          questionId: data.nextQuestion.questionId,
+        });
         setCurrentQuestion(data.nextQuestion);
         setCurrentIndex(data.nextQuestion.index);
+        setAnswer(savedDraft?.answer || "");
         setShowScores(false);
         setLastScores(null);
         if (textareaRef?.current) textareaRef.current.focus();
       }, 3000);
     }
-  }, []);
+  }, [currentIndex, currentQuestion?.questionId, sessionId]);
+
+  const toggleCurrentQuestionBookmark = async () => {
+    if (!currentQuestion?.questionId || bookmarking) return;
+
+    const nextBookmarked = !currentQuestion.bookmarked;
+    const previousQuestion = currentQuestion;
+
+    setBookmarking(true);
+    setError(null);
+    setCurrentQuestion((question) => ({
+      ...question,
+      bookmarked: nextBookmarked,
+    }));
+    setSession((currentSession) => {
+      if (!currentSession?.answers) return currentSession;
+      return {
+        ...currentSession,
+        answers: currentSession.answers.map((item) =>
+          item.questionId?.toString?.() === currentQuestion.questionId?.toString?.() ||
+          item.questionId === currentQuestion.questionId
+            ? { ...item, bookmarked: nextBookmarked }
+            : item,
+        ),
+      };
+    });
+
+    try {
+      const response = await toggleQuestionBookmark(
+        sessionId,
+        currentQuestion.questionId,
+        nextBookmarked,
+      );
+      const savedBookmarked = Boolean(response.data?.bookmarked);
+      setCurrentQuestion((question) => ({
+        ...question,
+        bookmarked: savedBookmarked,
+      }));
+      setSession((currentSession) => {
+        if (!currentSession?.answers) return currentSession;
+        return {
+          ...currentSession,
+          answers: currentSession.answers.map((item) =>
+            item.questionId?.toString?.() === currentQuestion.questionId?.toString?.() ||
+            item.questionId === currentQuestion.questionId
+              ? { ...item, bookmarked: savedBookmarked }
+              : item,
+          ),
+        };
+      });
+    } catch (err) {
+      setCurrentQuestion(previousQuestion);
+      setSession((currentSession) => {
+        if (!currentSession?.answers) return currentSession;
+        return {
+          ...currentSession,
+          answers: currentSession.answers.map((item) =>
+            item.questionId?.toString?.() === previousQuestion.questionId?.toString?.() ||
+            item.questionId === previousQuestion.questionId
+              ? { ...item, bookmarked: Boolean(previousQuestion.bookmarked) }
+              : item,
+          ),
+        };
+      });
+      setError(err.message || "Could not update bookmark. Please try again.");
+      logger.error("[InterviewSessionState] Bookmark error:", err);
+    } finally {
+      setBookmarking(false);
+    }
+  };
 
   const handleAnswerChange = (e, socket) => {
     const nextAnswer = e.target.value;
@@ -250,6 +349,12 @@ export const useInterviewState = (sessionId, isObserver) => {
     persistBackup({
       answer: nextAnswer,
       messages: [{ role: "candidate", content: nextAnswer, timestamp: Date.now() }],
+    });
+    saveInterviewAnswerDraft({
+      sessionId,
+      currentIndex,
+      questionId: currentQuestion?.questionId,
+      answer: nextAnswer,
     });
 
     if (socket && !isObserver) {
@@ -302,6 +407,7 @@ export const useInterviewState = (sessionId, isObserver) => {
         (attempt) => setRequestStatus(`Retrying final submission (${attempt}/${MAX_RETRY_ATTEMPTS})...`),
       );
       clearInterviewSession();
+      clearInterviewAnswerDraft();
       navigate(`/mock-interview/${sessionId}/results`, { replace: true });
     } catch (err) {
       setFailedAction("complete");
@@ -357,6 +463,8 @@ export const useInterviewState = (sessionId, isObserver) => {
     handleEvaluationResult,
     failedAction,
     setFailedAction,
+    bookmarking,
+    toggleCurrentQuestionBookmark,
     formatTime,
   };
 };

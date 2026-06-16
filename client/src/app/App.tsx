@@ -1,6 +1,6 @@
-import React, { useEffect, Suspense, lazy } from "react";
+import { useEffect, Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
+import { useAppDispatch, useAppSelector } from "../types/redux";
 import { fetchCurrentUser, logoutUser } from "../features/auth/authSlice";
 const LandingPage = lazy(() => import("../modules/landing/LandingPage"));
 const PrivacyPolicyPage = lazy(() => import("../modules/landing/pages/PrivacyPolicyPage"));
@@ -39,6 +39,7 @@ const InterviewLobby = lazy(() => import("../modules/mock-interview/pages/Interv
 const InterviewSession = lazy(() => import("../modules/mock-interview/pages/InterviewSession"));
 const InterviewResults = lazy(() => import("../modules/mock-interview/pages/InterviewResults"));
 const InterviewHistory = lazy(() => import("../modules/mock-interview/pages/InterviewHistory"));
+const BookmarkedQuestions = lazy(() => import("../modules/mock-interview/pages/BookmarkedQuestions"));
 const TutorInterviewConsole = lazy(() => import("../modules/mock-interview/pages/TutorInterviewConsole"));
 const TutorInterviewsList = lazy(() => import("../modules/mock-interview/pages/TutorInterviewsList"));
 const TutorAnalyticsDashboard = lazy(() => import("../modules/analytics/TutorAnalyticsDashboard"));
@@ -52,8 +53,8 @@ import { LoadingState, ErrorBoundary } from "../shared/components";
 import CommandPalette from "../shared/components/CommandPalette";
 
 function App() {
-  const dispatch = useDispatch();
-  const { token } = useSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
+  const { token } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
     if (token) {
@@ -80,6 +81,7 @@ function App() {
       <CommandPalette />
 
       <ErrorBoundary>
+        {/* @ts-ignore */}
         <Suspense fallback={<LoadingState title="Loading module..." />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -283,6 +285,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole="student">
               <InterviewHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/mock-interview/bookmarks"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <BookmarkedQuestions />
             </ProtectedRoute>
           }
         />

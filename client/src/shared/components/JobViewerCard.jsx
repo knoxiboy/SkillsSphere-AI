@@ -154,6 +154,8 @@ const JobViewerCard = ({
 
   const companyName = recruiter?.company || job.company || "SkillSphere Partner";
   const companyWebsite = recruiter?.companyWebsite || job.companyWebsite;
+  const recruiterName = recruiter?.name;
+  const recruiterLinkedIn = recruiter?.linkedinUrl;
 
   const canApply = status === "open" && !isApplied;
 
@@ -229,6 +231,25 @@ const JobViewerCard = ({
                     companyName
                   )}
                 </p>
+                {/* Recruiter identity */}
+                {recruiterName && (
+                  <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                    Posted by:{" "}
+                    {recruiterLinkedIn ? (
+                      <a
+                        href={recruiterLinkedIn}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline font-medium"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {recruiterName}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-gray-500 dark:text-slate-400">{recruiterName}</span>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="mt-1 shrink-0 text-blue-500 transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">
                 <ChevronDown size={20} className={`transform transition-transform ${isExpanded ? "rotate-180" : "-rotate-90"}`} />
@@ -398,6 +419,27 @@ const JobViewerCard = ({
                     <span className="shrink-0 text-gray-500 dark:text-slate-500">Posted</span>
                     <span className="font-medium text-gray-900 dark:text-slate-200 sm:text-right">{formatDate(createdAt)}</span>
                   </div>
+                  {/* Recruiter info in Quick Details */}
+                  {recruiterName && (
+                    <div className="flex flex-col gap-1 text-sm sm:flex-row sm:justify-between sm:gap-4">
+                      <span className="shrink-0 text-gray-500 dark:text-slate-500">Recruiter</span>
+                      <span className="min-w-0 break-words font-medium text-gray-900 dark:text-slate-200 sm:text-right">
+                        {recruiterLinkedIn ? (
+                          <a
+                            href={recruiterLinkedIn}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {recruiterName}
+                          </a>
+                        ) : (
+                          recruiterName
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Role-specific Actions ── */}
@@ -550,6 +592,7 @@ JobViewerCard.propTypes = {
       email: PropTypes.string,
       company: PropTypes.string,
       companyWebsite: PropTypes.string,
+      linkedinUrl: PropTypes.string,
     }),
     createdAt: PropTypes.string,
     // Legacy / optional fields some views may pass

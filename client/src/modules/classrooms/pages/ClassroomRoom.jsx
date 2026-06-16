@@ -26,6 +26,7 @@ import { endClassroomSession } from "../services/classroomService";
 
 import { SOCKET_URL } from "../../../config/env";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle";
+import ConfirmDialog from "../../../shared/components/ConfirmDialog";
 import { useToast } from "../../../shared/components/toast/ToastProvider";
 import logger from "../../../utils/logger";
 
@@ -47,6 +48,10 @@ export default function ClassroomRoom() {
   const [initialCode, setInitialCode] = useState("");
   const [initialWhiteboard, setInitialWhiteboard] = useState([]);
 
+  // Leave dialog state
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [leavingSession, setLeavingSession] = useState(false);
+
   // Controls state
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -66,6 +71,8 @@ export default function ClassroomRoom() {
       return;
     }
 
+    let mounted = true;
+
     // Initialize Socket
     const s = io(SOCKET_URL, { auth: { token } });
     setSocket(s);
@@ -75,6 +82,11 @@ export default function ClassroomRoom() {
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
+        if (!mounted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
         setLocalStream(stream);
         localStreamRef.current = stream;
 
@@ -258,7 +270,7 @@ export default function ClassroomRoom() {
           activeSocketIdsRef.current.delete(socketId);
           const item = peersRef.current.find((p) => p.peerId === socketId);
           if (item) {
-            item.peer.destroy();
+            item.peer?.destroy();
           }
           peersRef.current = peersRef.current.filter(
             (p) => p.peerId !== socketId,
@@ -272,6 +284,7 @@ export default function ClassroomRoom() {
       });
 
     return () => {
+      mounted = false;
       s.disconnect();
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -279,7 +292,7 @@ export default function ClassroomRoom() {
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
       }
-      peersRef.current.forEach((p) => p.peer.destroy());
+      peersRef.current.forEach((p) => p.peer?.destroy());
     };
   }, [roomId, user, token, navigate]);
 
@@ -462,26 +475,25 @@ export default function ClassroomRoom() {
     setChatInput("");
   };
 
-  const handleLeave = async () => {
-    if (user?.role === "tutor") {
-      const choice = window.confirm("Tutors: Click OK to END the session for everyone, or Cancel to just Leave.");
-      if (choice) {
-        try {
-          await endClassroomSession(roomId, token);
-          toast.success("Session ended successfully.");
-          navigate("/classrooms");
-        } catch (err) {
-          logger.error("Failed to end session", err);
-          toast.error("Failed to end session.");
-        }
-      } else {
-        navigate("/classrooms");
-      }
-    } else {
-      if (window.confirm("Are you sure you want to leave the classroom?")) {
-        navigate("/classrooms");
-      }
+  const handleLeave = () => {
+    setLeaveDialogOpen(true);
+  };
+
+  const handleEndSession = async () => {
+    setLeavingSession(true);
+    try {
+      await endClassroomSession(roomId, token);
+      toast.success("Session ended successfully.");
+      navigate("/classrooms");
+    } catch (err) {
+      logger.error("Failed to end session", err);
+      toast.error("Failed to end session.");
+      setLeavingSession(false);
     }
+  };
+
+  const handleLeaveOnly = () => {
+    navigate("/classrooms");
   };
 
   const copyRoomId = () => {
@@ -490,6 +502,7 @@ export default function ClassroomRoom() {
   };
 
   return (
+    <>
     <div className="h-screen bg-white dark:bg-[#0B0F19] text-slate-900 dark:text-white flex flex-col font-sans">
       {/* Top Header */}
       <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md z-20">
@@ -779,5 +792,53 @@ export default function ClassroomRoom() {
         </div>
       </div>
     </div>
+
+    {/* Leave / End session dialog — tutor has 3 choices, student has 2 */}
+    {user?.role === "tutor" ? (
+      leaveDialogOpen && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !leavingSession && setLeaveDialogOpen(false)} />
+          <div className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+            <h2 className="text-lg font-bold text-white">Leave classroom?</h2>
+            <p className="text-sm text-slate-300">Choose what happens when you leave this session.</p>
+            <div className="flex flex-col gap-3 pt-2">
+              <button
+                onClick={handleEndSession}
+                disabled={leavingSession}
+                className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+              >
+                {leavingSession ? "Ending…" : "End session for everyone"}
+              </button>
+              <button
+                onClick={handleLeaveOnly}
+                disabled={leavingSession}
+                className="w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+              >
+                Leave without ending
+              </button>
+              <button
+                onClick={() => setLeaveDialogOpen(false)}
+                disabled={leavingSession}
+                className="w-full py-2.5 rounded-xl border border-white/10 hover:bg-white/5 disabled:opacity-50 text-slate-300 text-sm font-semibold transition-colors"
+              >
+                Stay in session
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    ) : (
+      <ConfirmDialog
+        isOpen={leaveDialogOpen}
+        title="Leave classroom?"
+        message="Are you sure you want to leave this classroom session?"
+        confirmText="Leave"
+        cancelText="Stay"
+        variant="warning"
+        onConfirm={handleLeaveOnly}
+        onCancel={() => setLeaveDialogOpen(false)}
+      />
+    )}
+    </>
   );
 }

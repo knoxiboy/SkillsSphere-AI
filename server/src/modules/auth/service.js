@@ -29,7 +29,7 @@ const getGoogleClient = () => {
 };
 
 // 🔐 JWT generator
-const buildAuthToken = (user) => {
+export const buildAuthToken = (user) => {
   if (!process.env.JWT_SECRET) {
     throw new AppError("Missing JWT_SECRET in environment variables", 500);
   }
@@ -47,7 +47,7 @@ const generateOTP = () => {
 };
 
 // 📝 Register user
-export const registerUserAndIssueToken = async ({ name, email, password, role }) => {
+export const registerUserAndIssueToken = async ({ name, email, password, role, company }) => {
   const existingUser = await User.findOne({ email });
 
   if (existingUser) {
@@ -67,6 +67,7 @@ export const registerUserAndIssueToken = async ({ name, email, password, role })
     email,
     password: hashedPassword,
     role,
+    company,
     verificationToken: skipVerification ? undefined : hashedOtp,
     verificationTokenExpires: skipVerification ? undefined : otpExpiry,
     isVerified: skipVerification,
@@ -77,10 +78,12 @@ export const registerUserAndIssueToken = async ({ name, email, password, role })
     try {
       await sendOTP(email, otp, "verification");
     } catch (error) {
+      // Clean up the created user so they aren't left in a stranded unverified state
+      await User.findByIdAndDelete(user._id);
       throw new AppError("Failed to send verification email. Please try again.", 500);
     }
   } else {
-    logger.log(`[AUTH] User ${email} auto-verified (EMAIL_SERVICE_MODE=${emailMode})`);
+    logger.info(`[AUTH] User ${email} auto-verified (EMAIL_SERVICE_MODE=${emailMode})`);
   }
 
   const token = buildAuthToken(user);
@@ -102,10 +105,12 @@ export const registerUserAndIssueToken = async ({ name, email, password, role })
 export const verifyUserEmail = async (email, otp) => {
   const user = await User.findOne({ email });
 
-  if (!user || user.isVerified) {
-    throw new AppError("Invalid request", 400);
-  }
-
+  if (!user) {
+  throw new AppError("No account found with this email", 404);
+}
+if (user.isVerified) {
+  throw new AppError("Email is already verified. Please log in.", 400);
+}
   if (user.otpAttempts >= MAX_OTP_ATTEMPTS) {
     throw new AppError("Too many attempts. Please request a new OTP.", 429);
   }
@@ -139,14 +144,20 @@ export const verifyUserEmail = async (email, otp) => {
 
 // 🔑 Forgot password
 export const forgotPasswordRequest = async (email) => {
+  const GENERIC_RESPONSE = {
+    success: true,
+    message: "If an account exists with this email, a reset code has been sent.",
+  };
+
   const user = await User.findOne({ email });
 
   if (!user) {
-    return { success: true, message: "If an account exists with this email, a reset code has been sent." };
+    return GENERIC_RESPONSE;
   }
 
   if (user.resetPasswordExpires && user.resetPasswordExpires.getTime() > Date.now() + (OTP_EXPIRY_MINUTES - 1) * 60 * 1000) {
-    throw new AppError("Please wait a minute before requesting another reset code", 429);
+    // Avoid leaking account existence via a distinct rate-limit response.
+    return GENERIC_RESPONSE;
   }
 
   const otp = generateOTP();
@@ -164,7 +175,7 @@ export const forgotPasswordRequest = async (email) => {
     throw new AppError("Failed to send reset code. Please try again.", 500);
   }
 
-  return { success: true, message: "If an account exists with this email, a reset code has been sent." };
+  return GENERIC_RESPONSE;
 };
 
 // 🔄 Reset password
@@ -211,18 +222,25 @@ export const resetUserPassword = async (email, otp, newPassword) => {
 
 // 🔁 Resend OTP
 export const resendUserOTP = async (email) => {
+  const GENERIC_RESPONSE = {
+    success: true,
+    message: "If an account exists with this email, a verification code has been sent.",
+  };
+
   const user = await User.findOne({ email });
 
   if (!user) {
-    return { success: true, message: "If an account exists with this email, a verification code has been sent." };
+    return GENERIC_RESPONSE;
   }
 
   if (user.isVerified) {
-    throw new AppError("User is already verified", 400);
+    // Avoid leaking account existence/verification status via a distinct response.
+    return GENERIC_RESPONSE;
   }
 
   if (user.verificationTokenExpires && user.verificationTokenExpires.getTime() > Date.now() + (OTP_EXPIRY_MINUTES - 1) * 60 * 1000) {
-    throw new AppError("Please wait a minute before requesting another verification code", 429);
+    // Avoid leaking account existence via a distinct rate-limit response.
+    return GENERIC_RESPONSE;
   }
 
   const otp = generateOTP();
@@ -240,7 +258,7 @@ export const resendUserOTP = async (email) => {
     throw new AppError("Failed to resend verification code. Please try again.", 500);
   }
 
-  return { success: true, message: "If an account exists with this email, a verification code has been sent." };
+  return GENERIC_RESPONSE;
 };
 
 export const loginUser = async (email, password) => {
@@ -297,9 +315,7 @@ export const findOrCreateGoogleUser = async ({ email, name, picture, role = "stu
     return existing;
   }
 
-  if (action === "login") {
-    throw new AppError("No account found with this Google email. Please sign up first.", 404);
-  }
+  // Allow seamless signup even if the user clicked the Google button on the Login page.
 
   return User.create({
     name,

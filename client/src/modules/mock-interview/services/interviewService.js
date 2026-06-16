@@ -1,9 +1,5 @@
 import { apiRequest } from "../../../services/apiClient";
-
-const TOKEN_KEY = "skillssphere.auth.token";
-
-const getToken = () =>
-  localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+import { getToken } from "../../../utils/authToken";
 
 /**
  * Fetch available interview topics with question counts and difficulty levels.
@@ -71,6 +67,21 @@ export const getResults = async (sessionId) => {
  */
 export const getHistory = async (page = 1, limit = 10) => {
   return apiRequest(`/api/interviews/history?page=${page}&limit=${limit}`, {
+    method: "GET",
+    token: getToken(),
+  });
+};
+
+export const toggleQuestionBookmark = async (sessionId, questionId, bookmarked) => {
+  return apiRequest(`/api/interviews/${sessionId}/questions/${questionId}/bookmark`, {
+    method: "PATCH",
+    token: getToken(),
+    body: { bookmarked },
+  });
+};
+
+export const getBookmarkedQuestions = async () => {
+  return apiRequest("/api/interviews/bookmarks", {
     method: "GET",
     token: getToken(),
   });

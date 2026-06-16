@@ -113,6 +113,24 @@ export const clearAllNotifications = createAsyncThunk(
   }
 );
 
+/**
+ * Delete multiple notifications in bulk (with Optimistic UI updates)
+ */
+export const deleteNotificationsBulk = createAsyncThunk(
+  "notifications/deleteBulk",
+  async (ids, thunkAPI) => {
+    try {
+      const token = thunkAPI.getState()?.auth?.token;
+      if (!token) return thunkAPI.rejectWithValue("No auth token available");
+
+      await notificationService.deleteNotificationsBulk(ids, token);
+      return ids;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(toErrorMessage(error, "Failed to delete notifications in bulk"));
+    }
+  }
+);
+
 const initialState = {
   items: [],
   unreadCount: 0,
@@ -222,11 +240,16 @@ const notificationsSlice = createSlice({
 
       // Mark all notifications as read (Optimistic Update)
       .addCase(markAllAsRead.pending, (state) => {
-        state._rollbackUnreadIds = state.items
-          .filter((item) => !item.isRead)
-          .map((item) => item._id);
+        if (!state._rollbackUnreadIds) {
+          state._rollbackUnreadIds = state.items
+            .filter((item) => !item.isRead)
+            .map((item) => item._id);
+        }
         state.items = state.items.map((item) => ({ ...item, isRead: true }));
         state.unreadCount = 0;
+      })
+      .addCase(markAllAsRead.fulfilled, (state) => {
+        state._rollbackUnreadIds = null;
       })
       .addCase(markAllAsRead.rejected, (state, action) => {
         const unreadIds = state._rollbackUnreadIds;
@@ -287,6 +310,31 @@ const notificationsSlice = createSlice({
             state.unreadCount = snapshot.unreadCount;
             state.pagination = snapshot.pagination;
             state._rollbackSnapshot = null;
+          }
+          state.error = action.payload;
+        })
+
+      // Delete multiple notifications in bulk (Optimistic Update)
+      .addCase(deleteNotificationsBulk.pending, (state, action) => {
+          const ids = action.meta.arg;
+          const itemsToDelete = state.items.filter((item) => ids.includes(item._id));
+          
+          if (itemsToDelete.length > 0) {
+            state._rollbackBulkDeletedItems = itemsToDelete;
+            const unreadDeletedCount = itemsToDelete.filter((item) => !item.isRead).length;
+            state.unreadCount = Math.max(0, state.unreadCount - unreadDeletedCount);
+            state.items = state.items.filter((item) => !ids.includes(item._id));
+            state.pagination.total = Math.max(0, state.pagination.total - itemsToDelete.length);
+          }
+        })
+      .addCase(deleteNotificationsBulk.rejected, (state, action) => {
+          const deletedItems = state._rollbackBulkDeletedItems;
+          if (deletedItems && deletedItems.length > 0) {
+            state.items = [...state.items, ...deletedItems];
+            const unreadDeletedCount = deletedItems.filter((item) => !item.isRead).length;
+            state.unreadCount += unreadDeletedCount;
+            state.pagination.total += deletedItems.length;
+            state._rollbackBulkDeletedItems = null;
           }
           state.error = action.payload;
         });

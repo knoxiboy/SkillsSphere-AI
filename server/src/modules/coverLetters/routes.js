@@ -1,5 +1,5 @@
 import express from "express";
-import { getCoverLetters, getCoverLetterById, generateCoverLetter } from "./controller.js";
+import { getCoverLetters, getCoverLetterById, generateCoverLetter, deleteCoverLetter } from "./controller.js";
 import { protect, authorizeRoles } from "../../middleware/authMiddleware.js";
 import { validateBody } from "../../middleware/validation.js";
 import { generateCoverLetterSchema } from "../../validations/coverLetterValidation.js";
@@ -70,7 +70,26 @@ router.post("/generate", protect, authorizeRoles("student"), validateBody(genera
  *         description: Success
  *       404:
  *         description: Not found
+ *   delete:
+ *     summary: Delete a specific cover letter by ID
+ *     tags: [CoverLetters]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Deleted successfully
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Not found
  */
 router.get("/:id", protect, authorizeRoles("student"), getCoverLetterById);
+router.delete("/:id", protect, authorizeRoles("student"), deleteCoverLetter);
 
 export default router;

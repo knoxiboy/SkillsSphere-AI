@@ -407,7 +407,8 @@ export const getUserInterviewHistory = async (userId, page, limit) => {
     InterviewSession.countDocuments({ userId, status: { $ne: "abandoned" } }),
     InterviewSession.find({ userId, status: "completed" })
       .select("topic overallScore weakConcepts completedAt createdAt")
-      .sort({ completedAt: 1, createdAt: 1 })
+      .sort({ completedAt: -1, createdAt: -1 })
+      .limit(100)
       .lean(),
   ]);
 

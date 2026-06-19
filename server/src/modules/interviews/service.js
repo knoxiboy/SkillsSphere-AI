@@ -218,7 +218,9 @@ export const processAnswerSubmission = async ({
     const nextAudioPath = audioFile?.path || null;
 
     if (audioFile) {
-      session.answers[currentIndex].audioPath = nextAudioPath;
+if (audioFile) {
+        session.answers[currentIndex].audioPath = nextAudioPath;
+      }
     }
 
     // Move to next question

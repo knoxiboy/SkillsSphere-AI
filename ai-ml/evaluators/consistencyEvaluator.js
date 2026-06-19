@@ -15,17 +15,18 @@ function splitSentences(text) {
   return text.split(/[.!?]/).map(s => s.trim()).filter(Boolean);
 }
 
-// Build frequency map of words in the text
+// Build frequency map of words in the text and track absolute word count
 function getWordFrequency(text) {
-  const words = text.split(" ");
+  const words = text.split(/\s+/).filter(Boolean);
+  const totalWordCount = words.length; // Capture true total word count before filtering
   const freq = {};
 
   words.forEach(word => {
-    if (word.length < 3) return; // ignore small words
+    if (word.length < 3) return; // ignore small words for frequency evaluation
     freq[word] = (freq[word] || 0) + 1;
   });
 
-  return freq;
+  return { freqMap: freq, totalWordCount };
 }
 
 // Calculate dynamic threshold based on resume length (fixes #230)
@@ -50,13 +51,14 @@ function detectOverusedWords(freqMap, threshold) {
   });
 }
 
-// Detect duplicate sentences using simple similarity check
+// Detect duplicate sentences using full-string matching to avoid prefix collision false positives
 function detectDuplicateSentences(sentences) {
   const duplicates = [];
   const seen = new Set();
 
   sentences.forEach(sentence => {
-    const key = sentence.slice(0, 50); // lightweight similarity
+    // Use the entire normalized string as a hash key instead of truncating at 50 characters
+    const key = sentence.trim();
     if (seen.has(key)) {
       duplicates.push(sentence);
     } else {
@@ -77,21 +79,31 @@ const GENERIC_PHRASES = [
 ];
 
 // Detect usage of generic phrases
+// Detect usage of generic phrases using strict word boundaries to avoid substring false positives
 function detectGeneric(text) {
-  return GENERIC_PHRASES.filter(phrase => text.includes(phrase));
+  return GENERIC_PHRASES.filter(phrase => {
+    // Escapes any spaces inside the phrase and enforces word boundaries (\b) on both ends
+    const regex = new RegExp(`\\b${phrase}\\b`, "i");
+    return regex.test(text);
+  });
 }
 
 // Main evaluator function
 export default function consistencyEvaluator({
   resumeText = ""
 }) {
-  const clean = normalize(resumeText);
+  // 1. Split sentences using the raw text so punctuation delimiters still exist
+  const rawSentences = splitSentences(resumeText);
+  
+  // 2. Normalize individual sentences for clean structural comparison
+  const sentences = rawSentences.map(s => normalize(s));
 
   const sentences = splitSentences(clean);
-  const freqMap = getWordFrequency(clean);
+
+  // Extract both the frequency map and the non-deflated total word count
+  const { freqMap, totalWordCount: wordCount } = getWordFrequency(clean);
   
-  // Calculate word count and dynamic threshold (fixes #230)
-  const wordCount = Object.values(freqMap).reduce((sum, count) => sum + count, 0);
+  // Calculate dynamic threshold using the true word count (fixes #230)
   const dynamicThreshold = calculateDynamicThreshold(wordCount);
 
   const overusedWords = detectOverusedWords(freqMap, dynamicThreshold);

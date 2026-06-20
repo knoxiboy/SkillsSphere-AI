@@ -16,6 +16,15 @@ const CONFIG = {
     submitButton: ['button[type="submit"]', 'text=Register', 'text=Sign Up', 'text=Create Account'],
     emailField: ['input[type="email"]', 'input[name="email"]', '[data-testid="email"]'],
     passwordField: ['input[type="password"]', 'input[name="password"]', '[data-testid="password"]'],
+    nameField: ['input[name="name"]', 'input[name="fullName"]', '[data-testid="name"]', 'input[placeholder*="name" i]'],
+    confirmPasswordField: ['input[name="confirmPassword"]', 'input[name="passwordConfirm"]', '[data-testid="confirm-password"]', 'input[placeholder*="confirm" i]'],
+    successMessage: ['[data-testid="success"]', '[class*="success"]', '[role="status"]', 'text=Account created', 'text=Registration successful'],
+    errorMessage: ['[class*="error"]', '[class*="alert"]', '[role="alert"]', '[data-testid="error"]'],
+  },
+  testData: {
+    name: 'Test User',
+    email: `testuser${Date.now()}@example.com`,
+    password: 'Test@1234',
   },
 };
 
@@ -31,6 +40,15 @@ function attachNetworkLogger(page) {
     if (res.status() >= 400) {
       console.warn(`[network] ${res.status()} ${res.url()}`);
     }
+  });
+}
+
+function attachConsoleLogger(page) {
+  page.on('console', msg => {
+    if (msg.type() === 'error') console.warn(`[console.error] ${msg.text()}`);
+  });
+  page.on('pageerror', err => {
+    console.warn(`[page.error] ${err.message}`);
   });
 }
 
@@ -73,6 +91,27 @@ async function captureScreenshot(page, filename, label) {
   return filePath;
 }
 
+async function fillField(page, selectors, value, label) {
+  const sel = await waitForAny(page, selectors, CONFIG.timeouts.elementWait);
+  if (sel) {
+    await page.fill(sel, value);
+    console.log(`[fill] ${label} via: ${sel}`);
+    return sel;
+  }
+  console.warn(`[warn] ${label} field not found`);
+  return null;
+}
+
+async function extractFormValidationState(page) {
+  return page.$$eval('input', els => els.map(e => ({
+    name: e.name,
+    type: e.type,
+    valid: e.validity?.valid,
+    validationMessage: e.validationMessage,
+    value: e.type === 'password' ? '[hidden]' : e.value,
+  })));
+}
+
 (async () => {
   ensureDir(CONFIG.screenshotDir);
   ensureDir(CONFIG.videoDir);
@@ -85,6 +124,7 @@ async function captureScreenshot(page, filename, label) {
   try {
     const page = await context.newPage();
     attachNetworkLogger(page);
+    attachConsoleLogger(page);
 
     console.log('[nav] loading register page...');
     await page.goto(CONFIG.baseUrl, { waitUntil: 'networkidle' });
@@ -99,25 +139,23 @@ async function captureScreenshot(page, filename, label) {
       console.warn('[warn] no form detected — check CONFIG.selectors.form');
     }
 
+    // --- Fill name (optional field) ---
+    await fillField(page, CONFIG.selectors.nameField, CONFIG.testData.name, 'name');
+
     // --- Fill email ---
-    const emailSel = await waitForAny(page, CONFIG.selectors.emailField, CONFIG.timeouts.elementWait);
-    if (emailSel) {
-      await page.fill(emailSel, 'test@example.com');
-      console.log(`[fill] email filled via: ${emailSel}`);
-    } else {
-      console.warn('[warn] email field not found');
-    }
+    await fillField(page, CONFIG.selectors.emailField, CONFIG.testData.email, 'email');
 
     // --- Fill password ---
-    const passwordSel = await waitForAny(page, CONFIG.selectors.passwordField, CONFIG.timeouts.elementWait);
-    if (passwordSel) {
-      await page.fill(passwordSel, 'Test@1234');
-      console.log(`[fill] password filled via: ${passwordSel}`);
-    } else {
-      console.warn('[warn] password field not found');
-    }
+    await fillField(page, CONFIG.selectors.passwordField, CONFIG.testData.password, 'password');
+
+    // --- Fill confirm password (optional field) ---
+    await fillField(page, CONFIG.selectors.confirmPasswordField, CONFIG.testData.password, 'confirmPassword');
 
     await captureScreenshot(page, '02-signup-filled.png', 'form filled');
+
+    // --- Capture form validation state before submit ---
+    const validationState = await extractFormValidationState(page);
+    console.log('[debug] form validation state:', JSON.stringify(validationState, null, 2));
 
     // --- Submit ---
     const submitSel = await tryClick(page, CONFIG.selectors.submitButton, CONFIG.timeouts.elementWait);
@@ -125,19 +163,32 @@ async function captureScreenshot(page, filename, label) {
       await page.waitForTimeout(CONFIG.timeouts.pageLoad);
       await captureScreenshot(page, '03-signup-submitted.png', 'form submitted');
 
+      // --- Check for success message before nav ---
+      const successSel = await waitForAny(page, CONFIG.selectors.successMessage, 2000);
+      if (successSel) {
+        const successText = await page.$eval(successSel, el => el.innerText ?? el.textContent);
+        console.log(`[success] message: ${successText}`);
+        await captureScreenshot(page, '04-signup-success-msg.png', 'success message');
+      }
+
       const navigated = await waitForNavigation(page, '/dashboard', 3000);
       if (!navigated) {
-        const errors = await page.$$eval(
-          '[class*="error"],[class*="alert"],[role="alert"]',
-          els => els.map(e => e.innerText.trim())
-        );
-        if (errors.length > 0) console.warn('[warn] form errors:', errors);
+        // --- Extract error messages ---
+        const errorSel = await waitForAny(page, CONFIG.selectors.errorMessage, 2000);
+        if (errorSel) {
+          const errors = await page.$$eval(
+            '[class*="error"],[class*="alert"],[role="alert"],[data-testid="error"]',
+            els => els.map(e => e.innerText.trim()).filter(Boolean)
+          );
+          console.warn('[warn] form errors:', errors);
+        }
         await captureScreenshot(page, '04-signup-error.png', 'signup error state');
       } else {
-        await captureScreenshot(page, '04-signup-success.png', 'signup success');
+        await captureScreenshot(page, '04-signup-success.png', 'signup success — dashboard');
       }
     } else {
       console.warn('[warn] submit button not found — check CONFIG.selectors.submitButton');
+      await captureScreenshot(page, '03-submit-missing.png', 'submit button not found');
     }
 
     // --- Debug ---

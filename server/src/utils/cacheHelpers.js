@@ -3,6 +3,11 @@ import redisClient from "../config/redis.js";
 import logger from "./logger.js";
 
 export const invalidateCacheByPrefix = async (prefix) => {
+  if (!redisClient || !redisClient.isReady) {
+    logger.debug(`Cache invalidation skipped for prefix "${prefix}": Redis not available`);
+    return;
+  }
+
   try {
     let cursor = 0;
     const keys = [];

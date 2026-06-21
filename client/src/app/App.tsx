@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import { useEffect, Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
@@ -134,6 +133,7 @@ function App() {
         <Route
           path="/dashboard"
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               <ErrorBoundary><DashboardPage /></ErrorBoundary>
             </ProtectedRoute>
@@ -142,6 +142,7 @@ function App() {
         <Route
           path="/notifications"
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               {" "}
               <ErrorBoundary><NotificationsPage /></ErrorBoundary>
@@ -157,6 +158,7 @@ function App() {
         <Route 
           path="/onboarding" 
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               <OnboardingPage />
             </ProtectedRoute>
@@ -213,6 +215,7 @@ function App() {
         <Route
           path="/jobs"
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               <JobBoardPage />
             </ProtectedRoute>
@@ -229,6 +232,7 @@ function App() {
         <Route
           path="/profile"
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               <ErrorBoundary><ProfilePage /></ErrorBoundary>
             </ProtectedRoute>
@@ -259,6 +263,7 @@ function App() {
         <Route
           path="/classrooms"
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               <ErrorBoundary><ClassroomsDashboard /></ErrorBoundary>
             </ProtectedRoute>
@@ -267,6 +272,7 @@ function App() {
         <Route
           path="/classrooms/:roomId"
           element={
+            // @ts-expect-error TODO: Fix pervasive types
             <ProtectedRoute>
               <ErrorBoundary><ClassroomRoom /></ErrorBoundary>
             </ProtectedRoute>

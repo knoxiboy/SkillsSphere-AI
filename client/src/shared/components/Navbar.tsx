@@ -86,7 +86,11 @@ const Navbar = () => {
 
   const navLinks = [
     { name: 'Home', path: '/', icon: <Home size={20} /> },
-    ...(user?.role === 'recruiter' 
+    ...(user?.role === 'admin'
+      ? [
+          { name: 'Global Analytics', path: '/admin/analytics', icon: <LayoutDashboard size={20} /> },
+        ]
+      : user?.role === 'recruiter' 
       ? [
           { name: 'Manage Jobs', path: '/recruiter/jobs', icon: <Briefcase size={20} /> },
           { name: 'Talent Finder', path: '/recruiter/talent-finder', icon: <Search size={20} /> }

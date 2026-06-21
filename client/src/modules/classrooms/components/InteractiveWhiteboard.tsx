@@ -15,7 +15,7 @@ export default function InteractiveWhiteboard({ socket, roomId, userRole, initia
   // Initialize with initial elements if provided
   const initialData = {
     elements: Array.isArray(initialStrokes) ? initialStrokes : [],
-    appState: { viewBackgroundColor: "#0b0f19", theme: "dark" },
+    appState: { viewBackgroundColor: "#0b0f19", theme: "dark" as const },
     scrollToContent: true,
   };
 

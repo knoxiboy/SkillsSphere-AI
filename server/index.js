@@ -124,6 +124,8 @@ io.use(async (socket, next) => {
       ),
     );
   }
+});
+
 setIO(io);
 // Attach per-socket rate limiter to protect against message floods
 attachSocketRateLimiter(io);

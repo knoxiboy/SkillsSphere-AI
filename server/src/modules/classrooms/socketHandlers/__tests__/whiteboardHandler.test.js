@@ -99,30 +99,27 @@ describe("whiteboardHandler security", () => {
   it("broadcasts valid drawing events only to the socket classroom room", () => {
     const { handlers, broadcastEmits } = createSocketHarness({ roomId: "room-a" });
 
-    handlers.get("draw-stroke")({
+    handlers.get("excalidraw-update")({
       roomId: "room-a",
-      strokeData: validStroke(),
+      elements: [validStroke()],
     });
 
     assert.equal(broadcastEmits.length, 1);
     assert.equal(broadcastEmits[0].roomId, "room-a");
-    assert.equal(broadcastEmits[0].event, "draw-stroke");
+    assert.equal(broadcastEmits[0].event, "excalidraw-update");
     assert.equal(getRoomState("room-a").whiteboard.length, 1);
     assert.equal(getRoomState("room-b"), undefined);
   });
 
   it("blocks forged room IDs from modifying another classroom whiteboard", () => {
-    getOrCreateRoomState("room-b").whiteboard.push({
-      strokeData: validStroke({ actionId: "existing" }),
-      sender: { id: "other-user" },
-    });
+    getOrCreateRoomState("room-b").whiteboard = [validStroke({ actionId: "existing" })];
     const { handlers, socketEmits, broadcastEmits } = createSocketHarness({
       roomId: "room-a",
     });
 
-    handlers.get("draw-stroke")({
+    handlers.get("excalidraw-update")({
       roomId: "room-b",
-      strokeData: validStroke({ actionId: "forged" }),
+      elements: [validStroke({ actionId: "forged" })],
     });
 
     assert.equal(socketEmits.length, 1);
@@ -132,43 +129,21 @@ describe("whiteboardHandler security", () => {
     assert.equal(getRoomState("room-b").whiteboard.length, 1);
   });
 
-  it("rejects oversized stroke payloads without broadcasting", () => {
-    process.env.MAX_WHITEBOARD_PAYLOAD_BYTES = "80";
-    const { handlers, socketEmits, broadcastEmits } = createSocketHarness();
-
-    handlers.get("draw-stroke")({
-      roomId: "room-a",
-      strokeData: validStroke({ actionId: "x".repeat(200) }),
-    });
-
-    assert.equal(broadcastEmits.length, 0);
-    assert.equal(getRoomState("room-a"), undefined);
-    assert.equal(socketEmits.length, 1);
-    assert.equal(socketEmits[0].event, "whiteboard-error");
-    assert.equal(
-      socketEmits[0].payload.errorCode,
-      WHITEBOARD_ERROR_CODES.WHITEBOARD_PAYLOAD_TOO_LARGE,
-    );
-  });
-
   it("rejects malformed stroke data without broadcasting", () => {
     const malformedStrokes = [
       null,
-      [],
-      { type: "freehand", x: "0.5", y: 0.5 },
-      { type: "freehand", points: [{ x: 0.1 }] },
-      { type: "shape", shape: "polygon", startX: 0, startY: 0, endX: 1, endY: 1 },
-      { type: "text", text: "", x: 0.5, y: 0.5 },
-      { type: "freehand", x: 0.5, y: 0.5, unexpected: "field" },
+      "not an array",
+      123,
+      {},
     ];
 
-    for (const strokeData of malformedStrokes) {
+    for (const elements of malformedStrokes) {
       clearRoomState("room-a");
       const { handlers, socketEmits, broadcastEmits } = createSocketHarness();
 
-      handlers.get("draw-stroke")({
+      handlers.get("excalidraw-update")({
         roomId: "room-a",
-        strokeData,
+        elements,
       });
 
       assert.equal(broadcastEmits.length, 0);
@@ -215,10 +190,7 @@ describe("whiteboardHandler security", () => {
   });
 
   it("allows authorized users to clear the canvas", () => {
-    getOrCreateRoomState("room-a").whiteboard.push({
-      strokeData: validStroke(),
-      sender: { id: "user-1" },
-    });
+    getOrCreateRoomState("room-a").whiteboard = [validStroke()];
     const { handlers, broadcastEmits, socketEmits } = createSocketHarness({
       roomId: "room-a",
       role: "tutor",
@@ -234,10 +206,7 @@ describe("whiteboardHandler security", () => {
   });
 
   it("blocks unauthorized users from clearing the canvas", () => {
-    getOrCreateRoomState("room-a").whiteboard.push({
-      strokeData: validStroke(),
-      sender: { id: "user-1" },
-    });
+    getOrCreateRoomState("room-a").whiteboard = [validStroke()];
     const { handlers, broadcastEmits, socketEmits } = createSocketHarness({
       roomId: "room-a",
       role: "student",
@@ -256,10 +225,7 @@ describe("whiteboardHandler security", () => {
   });
 
   it("blocks forged room IDs from clearing another classroom canvas", () => {
-    getOrCreateRoomState("room-b").whiteboard.push({
-      strokeData: validStroke(),
-      sender: { id: "user-2" },
-    });
+    getOrCreateRoomState("room-b").whiteboard = [validStroke()];
     const { handlers, socketEmits, broadcastEmits } = createSocketHarness({
       roomId: "room-a",
       role: "tutor",

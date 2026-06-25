@@ -127,6 +127,19 @@ export default function registerWhiteboardHandler(io, socket) {
       return;
     }
 
+    if (elements.length === 0 && !canClearWhiteboard(socket)) {
+      emitWhiteboardError(socket, WHITEBOARD_ERROR_CODES.CLEAR_CANVAS_FORBIDDEN, "You are not allowed to clear this whiteboard.");
+      return;
+    }
+
+    for (const element of elements) {
+      const validation = validateWhiteboardStrokePayload(element);
+      if (!validation.isValid) {
+        emitWhiteboardError(socket, validation.error.errorCode, validation.error.message);
+        return;
+      }
+    }
+
     const state = getOrCreateRoomState(roomId);
     // Excalidraw elements represent the full current state of the board
     state.whiteboard = elements;

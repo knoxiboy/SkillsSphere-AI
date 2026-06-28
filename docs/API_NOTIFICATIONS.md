@@ -178,8 +178,9 @@ The REST create endpoint currently accepts:
 | `application` | Application status or application-related updates. |
 | `new_application` | New application notifications. |
 | `skill_gap_alert` | Skill gap alerts. |
-
-The Mongoose model also allows `application_status`, but the current REST `POST /api/notifications` controller does not accept that value.
+| `application_status` | Application status updates. |
+| `system` | System-level notifications. |
+| `message` | Direct messages or chat notifications. |
 
 ## Endpoint Summary
 
@@ -768,7 +769,7 @@ Example:
   "status": "fail",
   "message": "Validation failed",
   "errors": {
-    "type": "Type must be one of: info, warning, success, error, job-update, interview, application, new_application, skill_gap_alert"
+    "type": "Type must be one of: info, warning, success, error, job-update, interview, application, new_application, skill_gap_alert, application_status, system, message"
   }
 }
 ```

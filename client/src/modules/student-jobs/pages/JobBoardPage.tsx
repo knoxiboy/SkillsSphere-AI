@@ -15,12 +15,7 @@ import { getJobs, applyToJob, getMyAppliedJobIds } from "../services/jobService"
 import JobCardSkeleton from "../components/JobCardSkeleton";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle";
 import { useToast } from "../../../shared/components/toast/ToastProvider";
-
-interface Job {
-  _id?: string;
-  id?: string;
-  [key: string]: unknown;
-}
+import { JobPosting } from "../../../types";
 
 interface AuthState {
   token: string;
@@ -35,13 +30,13 @@ const JobBoardPage = () => {
   useDocumentTitle("Job Board");
   const { token, user } = useSelector((state: RootState) => state.auth);
   const toast = useToast();
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, unknown>>({});
   const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
   const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
-  const [applyModalJob, setApplyModalJob] = useState<Job | null>(null);
+  const [applyModalJob, setApplyModalJob] = useState<JobPosting | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -87,7 +82,7 @@ const JobBoardPage = () => {
     setFilters(newFilters);
   }, []);
 
-  const handleApply = (job: Job) => {
+  const handleApply = (job: JobPosting) => {
     setApplyModalJob(job);
   };
 
@@ -182,7 +177,7 @@ const JobBoardPage = () => {
                 ))}
               </div>
             ): error ? (
-              <ErrorState message={error} onRetry={() => fetchJobs(filters)} />
+              <ErrorState description={error} onRetry={() => fetchJobs(filters)} />
             ) : jobs.length === 0 ? (
               <EmptyState
                 icon={<Briefcase size={64} className="text-slate-700 mb-4" />}
@@ -199,6 +194,7 @@ const JobBoardPage = () => {
                   <JobViewerCard
                     key={job._id || job.id}
                     job={job}
+                    title={job.title}
                     viewerRole="student"
                     onApply={handleApply}
                     isApplied={appliedJobIds.has(job._id || job.id || "")}
